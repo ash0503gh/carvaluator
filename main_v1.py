@@ -37,44 +37,66 @@ class ValuationRequest(BaseModel):
 
 def decode_rc(rc_number: str) -> dict:
     """
-    Call RapidAPI Vehicle RC Information to get vehicle details.
-    Free tier available at: https://rapidapi.com/fatehbrar92/api/vehicle-rc-information
+    Call RapidAPI "RTO Vehicle Information India" (eccentriclabs) to get vehicle details.
+    Synchronous single-call API — no task/poll flow.
+    Subscribe (free tier): https://rapidapi.com/streamifyworld/api/rto-vehicle-information-india
     """
     if not RAPIDAPI_KEY:
         raise HTTPException(status_code=500, detail="RAPIDAPI_KEY not configured")
 
-    url = "https://vehicle-rc-information.p.rapidapi.com/vehicleData"
+    url = "https://rto-vehicle-information-india.p.rapidapi.com/getVehicleInfo"
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "vehicle-rc-information.p.rapidapi.com",
+        "x-rapidapi-host": "rto-vehicle-information-india.p.rapidapi.com",
+        "Content-Type": "application/json",
     }
-    params = {"vehicleNumber": rc_number.upper().replace(" ", "")}
+    payload = {
+        "vehicle_no": rc_number.upper().replace(" ", ""),
+        "consent": "Y",
+        "consent_text": "I hereby give my consent for Eccentric Labs API to fetch my information",
+    }
 
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
+        resp = requests.post(url, headers=headers, json=payload, timeout=20)
         data = resp.json()
 
-        if resp.status_code != 200 or not data.get("result"):
+        if resp.status_code != 200 or not data.get("status") or not data.get("data"):
             raise HTTPException(
                 status_code=404,
                 detail=f"Could not find vehicle data for {rc_number}. Please check the registration number.",
             )
 
-        result = data["result"]
+        result = data["data"]
+
+        # maker_model looks like "HONDA CARS INDIA LTD / CIVIC 1.6 ZX MT (I-DTEC)"
+        maker_model = result.get("maker_model", "") or ""
+        if "/" in maker_model:
+            manufacturer, model_str = maker_model.split("/", 1)
+        else:
+            manufacturer, model_str = maker_model, ""
+
+        owner_sr_raw = result.get("ownership", "1")
+        try:
+            owner_sr = int(owner_sr_raw)
+        except (ValueError, TypeError):
+            owner_sr = 1
+
         return {
-            "rc_number": result.get("registration_number", rc_number),
+            "rc_number": result.get("registration_no", rc_number),
             "reg_date": result.get("registration_date", ""),
             "owner_name": result.get("owner_name", ""),
-            "fuel_type": result.get("fuel_type", ""),
-            "vehicle_manufacturer": result.get("vehicle_manufacturer_name", ""),
-            "vehicle_model": result.get("vehicle_model", ""),
-            "owner_sr": int(result.get("owner_sr", result.get("owner_serial_number", 1))),
+            "fuel_type": (result.get("fuel_type", "") or "").title(),
+            "vehicle_manufacturer": manufacturer.strip(),
+            "vehicle_model": model_str.strip(),
+            "owner_sr": owner_sr,
             "rto_code": rc_number[:4].upper(),
-            "vehicle_class": result.get("vehicle_class_desc", result.get("vh_class_desc", "")),
+            "vehicle_class": result.get("vehicle_class", ""),
             "insurance_validity": result.get("insurance_upto", ""),
             "fitness_upto": result.get("fitness_upto", ""),
-            "financer": result.get("financer", ""),
-            "color": result.get("color", ""),
+            "financer": result.get("financier_name", "") or "",
+            "color": result.get("vehicle_color", ""),
+            "rc_status": result.get("rc_status", ""),
+            "body_type": result.get("body_type_desc", ""),
         }
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"RC API call failed: {str(e)}")
