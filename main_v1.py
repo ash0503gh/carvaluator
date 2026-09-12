@@ -17,6 +17,8 @@ from valuation_v1 import compute_valuation, calc_age_years, load_catalog
 
 load_dotenv()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 app = FastAPI(title="CarValuator", version="1.0")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
