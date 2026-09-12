@@ -1,0 +1,156 @@
+{
+  "models": [
+    {
+      "model": "Alto 800",
+      "generations": [
+        {"gen": "3rd Gen", "years": [2012, 2023], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["Std", "LXI", "VXI", "LXI CNG", "VXI CNG"], "ex_showroom_base_lakh": 3.4}
+      ]
+    },
+    {
+      "model": "Alto K10",
+      "generations": [
+        {"gen": "1st Gen", "years": [2010, 2014], "body": "Hatchback", "fuel_types": ["Petrol"], "variants": ["LXI", "VXI", "VXI AT"], "ex_showroom_base_lakh": 3.1},
+        {"gen": "2nd Gen", "years": [2014, 2022], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["Std", "LXI", "VXI", "VXI AMT", "LXI CNG"], "ex_showroom_base_lakh": 3.6},
+        {"gen": "3rd Gen", "years": [2022, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["Std", "LXI", "VXI", "VXI Plus", "VXI AMT", "LXI CNG", "VXI CNG"], "ex_showroom_base_lakh": 4.0}
+      ]
+    },
+    {
+      "model": "WagonR",
+      "generations": [
+        {"gen": "2nd Gen", "years": [2010, 2019], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "LXI CNG", "VXI CNG", "Stingray LXI", "Stingray VXI"], "ex_showroom_base_lakh": 4.0},
+        {"gen": "3rd Gen", "years": [2019, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "ZXI Plus AMT", "LXI CNG", "VXI S-CNG"], "ex_showroom_base_lakh": 5.5}
+      ]
+    },
+    {
+      "model": "Celerio",
+      "generations": [
+        {"gen": "1st Gen", "years": [2014, 2021], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "LXI AT", "VXI AT", "ZXI AT", "VXI CNG"], "ex_showroom_base_lakh": 4.3},
+        {"gen": "2nd Gen", "years": [2021, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "VXI S-CNG"], "ex_showroom_base_lakh": 5.4}
+      ]
+    },
+    {
+      "model": "Swift",
+      "generations": [
+        {"gen": "2nd Gen", "years": [2010, 2011], "body": "Hatchback", "fuel_types": ["Petrol", "Diesel"], "variants": ["LXI", "VXI", "ZXI", "LDI", "VDI", "ZDI"], "ex_showroom_base_lakh": 4.6},
+        {"gen": "3rd Gen", "years": [2011, 2018], "body": "Hatchback", "fuel_types": ["Petrol", "Diesel"], "variants": ["LXI", "VXI", "ZXI", "LDI", "VDI", "ZDI"], "ex_showroom_base_lakh": 5.0},
+        {"gen": "4th Gen", "years": [2018, 2024], "body": "Hatchback", "fuel_types": ["Petrol", "Diesel", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "ZXI Plus AMT", "VDI", "ZDI", "ZDI Plus", "VXI CNG"], "ex_showroom_base_lakh": 6.0},
+        {"gen": "5th Gen", "years": [2024, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "ZXI Plus AMT", "VXI S-CNG"], "ex_showroom_base_lakh": 6.5}
+      ]
+    },
+    {
+      "model": "Dzire",
+      "generations": [
+        {"gen": "1st Gen (Swift Dzire)", "years": [2010, 2012], "body": "Sedan", "fuel_types": ["Petrol", "Diesel"], "variants": ["LXI", "VXI", "ZXI", "LDI", "VDI", "ZDI"], "ex_showroom_base_lakh": 5.2},
+        {"gen": "2nd Gen (Swift Dzire)", "years": [2012, 2017], "body": "Sedan", "fuel_types": ["Petrol", "Diesel"], "variants": ["LXI", "VXI", "ZXI", "LDI", "VDI", "ZDI"], "ex_showroom_base_lakh": 5.5},
+        {"gen": "3rd Gen", "years": [2017, 2024], "body": "Sedan", "fuel_types": ["Petrol", "Diesel", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "ZXI Plus AMT", "VDI", "ZDI", "ZDI Plus", "VXI S-CNG"], "ex_showroom_base_lakh": 6.2},
+        {"gen": "4th Gen", "years": [2024, 2026], "body": "Sedan", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AMT", "ZXI AMT", "ZXI Plus AMT", "VXI S-CNG"], "ex_showroom_base_lakh": 7.0}
+      ]
+    },
+    {
+      "model": "Baleno",
+      "generations": [
+        {"gen": "1st Gen", "years": [2015, 2022], "body": "Hatchback", "fuel_types": ["Petrol", "Diesel"], "variants": ["Sigma", "Delta", "Zeta", "Alpha", "Delta AT", "Zeta AT", "Alpha AT", "Delta Diesel", "Zeta Diesel", "Alpha Diesel"], "ex_showroom_base_lakh": 5.6},
+        {"gen": "2nd Gen", "years": [2022, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["Sigma", "Delta", "Zeta", "Alpha", "Delta AMT", "Zeta AMT", "Alpha AMT", "Delta CNG"], "ex_showroom_base_lakh": 6.7}
+      ]
+    },
+    {
+      "model": "Ciaz",
+      "generations": [
+        {"gen": "1st Gen", "years": [2014, 2018], "body": "Sedan", "fuel_types": ["Petrol", "Diesel", "CNG"], "variants": ["Sigma", "Delta", "Zeta", "Alpha", "Delta Diesel", "Zeta Diesel", "Alpha Diesel", "Zeta CNG"], "ex_showroom_base_lakh": 7.5},
+        {"gen": "Facelift", "years": [2018, 2024], "body": "Sedan", "fuel_types": ["Petrol", "Diesel"], "variants": ["Sigma", "Delta", "Zeta", "Alpha", "Zeta AT", "Alpha AT", "Delta Diesel", "Zeta Diesel", "Alpha Diesel"], "ex_showroom_base_lakh": 8.5}
+      ]
+    },
+    {
+      "model": "Ertiga",
+      "generations": [
+        {"gen": "1st Gen", "years": [2012, 2018], "body": "MPV", "fuel_types": ["Petrol", "Diesel", "CNG"], "variants": ["LXI", "VXI", "ZXI", "LDI", "VDI", "ZDI", "VXI CNG"], "ex_showroom_base_lakh": 6.5},
+        {"gen": "2nd Gen", "years": [2018, 2026], "body": "MPV", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AT", "ZXI AT", "ZXI Plus AT", "VXI S-CNG", "ZXI S-CNG"], "ex_showroom_base_lakh": 8.7}
+      ]
+    },
+    {
+      "model": "Vitara Brezza",
+      "generations": [
+        {"gen": "1st Gen", "years": [2016, 2022], "body": "SUV", "fuel_types": ["Diesel", "Petrol"], "variants": ["LDI", "VDI", "ZDI", "ZDI Plus", "ZDI Plus AT", "LXI", "VXI", "ZXI", "ZXI Plus"], "ex_showroom_base_lakh": 7.5}
+      ]
+    },
+    {
+      "model": "Brezza",
+      "generations": [
+        {"gen": "2nd Gen", "years": [2022, 2026], "body": "SUV", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "ZXI Plus", "VXI AT", "ZXI AT", "ZXI Plus AT", "VXI S-CNG", "ZXI S-CNG"], "ex_showroom_base_lakh": 8.3}
+      ]
+    },
+    {
+      "model": "S-Cross",
+      "generations": [
+        {"gen": "1st Gen", "years": [2015, 2022], "body": "SUV", "fuel_types": ["Diesel", "Petrol"], "variants": ["Sigma", "Delta", "Zeta", "Alpha"], "ex_showroom_base_lakh": 8.5}
+      ]
+    },
+    {
+      "model": "Ignis",
+      "generations": [
+        {"gen": "1st Gen", "years": [2017, 2024], "body": "Hatchback", "fuel_types": ["Petrol"], "variants": ["Sigma", "Delta", "Zeta", "Alpha", "Delta AMT", "Zeta AMT", "Alpha AMT"], "ex_showroom_base_lakh": 5.3}
+      ]
+    },
+    {
+      "model": "S-Presso",
+      "generations": [
+        {"gen": "1st Gen", "years": [2019, 2026], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["Std", "LXI", "VXI", "VXI Plus", "VXI AMT", "VXI Plus AMT", "LXI CNG", "VXI S-CNG"], "ex_showroom_base_lakh": 4.3}
+      ]
+    },
+    {
+      "model": "XL6",
+      "generations": [
+        {"gen": "1st Gen", "years": [2019, 2022], "body": "MPV", "fuel_types": ["Petrol"], "variants": ["Zeta", "Alpha", "Zeta AT", "Alpha AT"], "ex_showroom_base_lakh": 10.0},
+        {"gen": "2nd Gen", "years": [2022, 2026], "body": "MPV", "fuel_types": ["Petrol", "CNG"], "variants": ["Zeta", "Alpha", "Zeta AT", "Alpha AT", "Zeta S-CNG"], "ex_showroom_base_lakh": 11.3}
+      ]
+    },
+    {
+      "model": "Ritz",
+      "generations": [
+        {"gen": "1st Gen", "years": [2010, 2016], "body": "Hatchback", "fuel_types": ["Petrol", "Diesel"], "variants": ["LXI", "VXI", "VXI AT", "ZXI", "LDI", "VDI"], "ex_showroom_base_lakh": 4.5}
+      ]
+    },
+    {
+      "model": "A-Star",
+      "generations": [
+        {"gen": "1st Gen", "years": [2010, 2014], "body": "Hatchback", "fuel_types": ["Petrol", "CNG"], "variants": ["LXI", "VXI", "ZXI", "VXI AT", "LXI CNG"], "ex_showroom_base_lakh": 3.8}
+      ]
+    },
+    {
+      "model": "SX4",
+      "generations": [
+        {"gen": "1st Gen", "years": [2010, 2014], "body": "Sedan", "fuel_types": ["Petrol", "Diesel"], "variants": ["VXI", "ZXI", "ZXI AT", "Diesel"], "ex_showroom_base_lakh": 7.0}
+      ]
+    },
+    {
+      "model": "Fronx",
+      "generations": [
+        {"gen": "1st Gen", "years": [2023, 2026], "body": "SUV Coupe", "fuel_types": ["Petrol", "CNG"], "variants": ["Sigma", "Delta", "Delta Plus", "Zeta", "Alpha", "Delta AT", "Delta Plus AT", "Zeta AT", "Alpha AT", "Delta Plus S-CNG", "Zeta S-CNG"], "ex_showroom_base_lakh": 7.5}
+      ]
+    },
+    {
+      "model": "Jimny",
+      "generations": [
+        {"gen": "India Launch", "years": [2023, 2026], "body": "SUV", "fuel_types": ["Petrol"], "variants": ["Zeta", "Alpha", "Zeta AT", "Alpha AT"], "ex_showroom_base_lakh": 12.7}
+      ]
+    },
+    {
+      "model": "Invicto",
+      "generations": [
+        {"gen": "1st Gen", "years": [2023, 2026], "body": "MPV", "fuel_types": ["Hybrid"], "variants": ["Zeta", "Zeta Plus", "Alpha", "Alpha Plus"], "ex_showroom_base_lakh": 25.2}
+      ]
+    },
+    {
+      "model": "Eeco",
+      "generations": [
+        {"gen": "1st Gen", "years": [2010, 2026], "body": "Van", "fuel_types": ["Petrol", "CNG"], "variants": ["5 Seater Std", "5 Seater AC", "7 Seater Std", "7 Seater AC", "5 Seater AC CNG", "Cargo", "Ambulance"], "ex_showroom_base_lakh": 4.6}
+      ]
+    }
+  ],
+  "ncr_rto_prefixes": ["DL", "HR03", "HR05", "HR06", "HR10", "HR20", "HR26", "HR36", "HR38", "HR48", "HR51", "HR55", "HR58", "HR69", "HR70", "HR85", "HR86", "UP14", "UP15", "UP16", "UP20", "UP21", "RJ14"],
+  "city_tier_map": {
+    "tier1": ["DL", "MH01", "MH02", "MH03", "MH04", "MH05", "MH12", "MH14", "KA01", "KA02", "KA03", "KA04", "KA05", "KA50", "KA51", "KA53", "TN01", "TN02", "TN03", "TN04", "TN05", "TN06", "TN07", "TN09", "TN10", "TN22", "WB01", "WB02", "WB03", "WB04", "WB06", "GJ01", "GJ06", "GJ15", "GJ18", "GJ23", "AP09", "AP10", "AP11", "AP28", "AP29", "AP31", "TS07", "TS08", "TS09", "TS10", "TS11"],
+    "tier2": ["UP32", "UP65", "UP70", "UP78", "UP80", "UP81", "RJ14", "RJ20", "RJ27", "MP04", "MP09", "MP20", "PB02", "PB08", "PB10", "PB65", "CG04", "JH01", "JH02", "JH05"],
+    "tier3_default": true
+  }
+}

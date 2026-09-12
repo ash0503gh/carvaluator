@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarValuator — Maruti Suzuki Used Car Valuation</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-shell">
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect width="28" height="28" rx="6" fill="#2563eb"/>
+                <path d="M7 18.5C7 18.5 9 12 14 12C19 12 21 18.5 21 18.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="10" cy="19" r="2" fill="white"/>
+                <circle cx="18" cy="19" r="2" fill="white"/>
+                <rect x="11" y="9" width="6" height="4" rx="1" fill="white" opacity="0.7"/>
+            </svg>
+            <span>CarValuator</span>
+        </div>
+        <p class="tagline">Maruti Suzuki · AI-powered used car valuation</p>
+    </header>
+
+    <!-- Input Section -->
+    <main class="main-content">
+        <section class="input-section">
+            <h1>What's your Maruti worth?</h1>
+            <p class="input-subtitle">Enter your registration number and odometer reading. We'll research current market prices and calculate a fair valuation range.</p>
+
+            <div class="input-group">
+                <div class="field">
+                    <label for="rc-number">Registration Number</label>
+                    <input
+                        type="text"
+                        id="rc-number"
+                        placeholder="KA01AB1234"
+                        maxlength="13"
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                    <span class="field-hint">As shown on your number plate</span>
+                </div>
+
+                <div class="field">
+                    <label for="km-run">Odometer (KM)</label>
+                    <input
+                        type="number"
+                        id="km-run"
+                        placeholder="45000"
+                        min="0"
+                        max="999999"
+                    >
+                    <span class="field-hint">Current reading from your dashboard</span>
+                </div>
+            </div>
+
+            <button id="valuate-btn" onclick="submitValuation()">
+                <span class="btn-text">Get Valuation</span>
+                <span class="btn-loader" style="display:none;">
+                    <span class="spinner"></span>
+                    Researching prices...
+                </span>
+            </button>
+
+            <p class="processing-note" id="processing-note" style="display:none;">
+                This takes 15-20 seconds — the AI is searching live listings on CarDekho, Cars24, and OLX to find current market prices for your car.
+            </p>
+        </section>
+
+        <!-- Error Display -->
+        <div id="error-container" class="error-container" style="display:none;">
+            <p id="error-message"></p>
+        </div>
+
+        <!-- Results Section -->
+        <section id="results" class="results-section" style="display:none;">
+
+            <!-- Vehicle Identity Card -->
+            <div class="card vehicle-card">
+                <div class="card-header">
+                    <h2 id="vehicle-title">—</h2>
+                    <span class="confidence-badge" id="confidence-badge">—</span>
+                </div>
+                <div class="vehicle-meta" id="vehicle-meta"></div>
+            </div>
+
+            <!-- Valuation Range Card -->
+            <div class="card valuation-card">
+                <h3>Estimated Market Value</h3>
+                <div class="range-display">
+                    <div class="range-bar-container">
+                        <div class="range-label-row">
+                            <span class="range-low" id="range-low">—</span>
+                            <span class="range-median" id="range-median">—</span>
+                            <span class="range-high" id="range-high">—</span>
+                        </div>
+                        <div class="range-bar">
+                            <div class="range-fill" id="range-fill"></div>
+                            <div class="range-marker" id="range-marker"></div>
+                        </div>
+                        <div class="range-labels">
+                            <span>Low</span>
+                            <span>Fair value</span>
+                            <span>High</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="explanation" id="explanation">—</p>
+            </div>
+
+            <!-- Adjustments Breakdown -->
+            <div class="card adjustments-card">
+                <h3>Valuation Breakdown</h3>
+                <div class="adjustment-grid" id="adjustment-grid"></div>
+            </div>
+
+            <!-- Flags & Warnings -->
+            <div class="card flags-card" id="flags-card" style="display:none;">
+                <h3>Notices</h3>
+                <div id="flags-list"></div>
+            </div>
+
+            <!-- Disclaimer -->
+            <p class="disclaimer" id="disclaimer"></p>
+
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>CarValuator · Prices sourced via AI from live listings · Not a certified appraisal</p>
+    </footer>
+
+</div>
+
+<script src="app_v1.js"></script>
+</body>
+</html>
