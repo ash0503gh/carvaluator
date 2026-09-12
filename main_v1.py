@@ -60,12 +60,25 @@ def decode_rc(rc_number: str) -> dict:
 
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=20)
+
+        # Surface auth/config errors distinctly from "vehicle not found"
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise HTTPException(
+                status_code=502,
+                detail=f"RapidAPI authentication failed (HTTP {resp.status_code}). Check that RAPIDAPI_KEY is set correctly in Render's environment variables. Response: {resp.text[:300]}",
+            )
+        if resp.status_code == 429:
+            raise HTTPException(
+                status_code=502,
+                detail="RapidAPI rate limit or monthly quota exceeded. Check your plan usage on RapidAPI dashboard.",
+            )
+
         data = resp.json()
 
         if resp.status_code != 200 or not data.get("status") or not data.get("data"):
             raise HTTPException(
                 status_code=404,
-                detail=f"Could not find vehicle data for {rc_number}. Please check the registration number.",
+                detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(data)[:300]}",
             )
 
         result = data["data"]
