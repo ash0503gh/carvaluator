@@ -312,14 +312,21 @@ async def valuate(req: ValuationRequest):
 
     # Step 3: Extract price research from Gemini
     price_research = gemini_result.get("market_price_research", {})
-    market_low = price_research.get("low_lakh", 0)
-    market_high = price_research.get("high_lakh", 0)
-    market_median = price_research.get("median_lakh", 0)
+    # Use `or 0` instead of .get(key, 0) — Gemini can return an explicit `null`
+    # for a field it's still present in the JSON, and .get()'s default only
+    # applies when the key is missing entirely, not when its value is None.
+    market_low = price_research.get("low_lakh") or 0
+    market_high = price_research.get("high_lakh") or 0
+    market_median = price_research.get("median_lakh") or 0
 
-    if market_median == 0:
+    if not market_low or not market_high or not market_median:
         raise HTTPException(
             status_code=422,
-            detail="Could not determine market price for this vehicle. The model may be too rare or data unavailable.",
+            detail=(
+                "Could not determine a complete market price range for this vehicle. "
+                f"Gemini returned: low={market_low}, high={market_high}, median={market_median}. "
+                "The model may be too rare or comparable listings weren't found."
+            ),
         )
 
     # Step 4: Calculate age
