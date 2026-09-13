@@ -113,12 +113,32 @@ def decode_rc(rc_number: str) -> dict:
                 detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(data)[:400]}",
             )
 
+        # This provider can return a top-level JSON array instead of an object
+        # (e.g. [] for "not found", or [{...}] wrapping a single result).
+        if isinstance(data, list):
+            if not data:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Could not find vehicle data for {rc_number}. API returned an empty list.",
+                )
+            if isinstance(data[0], dict):
+                data = data[0]
+            else:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"RC API returned an unexpected list shape: {json.dumps(data)[:400]}",
+                )
+
         # Provider's exact response envelope wasn't visible at integration time —
         # unwrap common wrapper patterns (data/result/response) if present.
         result = data
         for wrapper_key in ("data", "result", "response"):
-            if isinstance(data.get(wrapper_key), dict):
-                result = data[wrapper_key]
+            wrapped = data.get(wrapper_key)
+            if isinstance(wrapped, dict):
+                result = wrapped
+                break
+            if isinstance(wrapped, list) and wrapped and isinstance(wrapped[0], dict):
+                result = wrapped[0]
                 break
 
         def first_present(*keys, default=""):
