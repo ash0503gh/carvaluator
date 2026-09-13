@@ -22,7 +22,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="CarValuator", version="1.0")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 CATALOG = load_catalog()
@@ -35,160 +34,109 @@ class ValuationRequest(BaseModel):
     km_run: int
 
 
-# ─── RC Decode (RapidAPI - Vehicle RC Information) ──────────────────
+# ─── RC Decode (Vehicle Details PRO - RapidAPI) ─────────────────────
+# Confirmed against a live test response (10 free calls/month on Basic).
+# Simple GET + query param, no request signing needed — unlike Eko's HMAC flow.
 
-def _post_preserving_method(url, headers, data, timeout, max_redirects=5):
-    """
-    requests.post() follows 301/302 redirects the same way browsers do:
-    by silently converting the method to GET. Some API proxies (RapidAPI's
-    among them) redirect from the edge host to the actual backend host, and
-    if that redirect is a 301/302, our POST becomes a GET and the backend
-    correctly rejects it. This preserves POST through 301/302/307/308 —
-    only a 303 (which explicitly means "re-fetch with GET") converts.
-    """
-    current_url = url
-    for _ in range(max_redirects):
-        resp = requests.post(current_url, headers=headers, data=data, timeout=timeout, allow_redirects=False)
-        if resp.status_code in (301, 302, 307, 308):
-            location = resp.headers.get("Location")
-            if not location:
-                return resp
-            current_url = requests.compat.urljoin(current_url, location)
-            continue
-        return resp
-    return resp  # exhausted redirects, return last response as-is
-
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 
 def decode_rc(rc_number: str) -> dict:
     """
-    Call RapidAPI "Vehicle RC Verification" (zapfintek) to get vehicle details.
-    Synchronous single-call API. Free tier: 500,000 requests/month.
-    Subscribe: https://rapidapi.com/zapfintek/api/vehicle-rc-verification1
-
-    NOTE: This provider requires a static 'Accesstoken' header in addition to
-    your normal RapidAPI key — this value is fixed by the provider (not tied
-    to your account) and was captured from their published code sample.
-    Response field names weren't visible in the provider's docs at integration
-    time, so this function checks several common variants per field and
-    raises a diagnostic error showing the raw response if none match —
-    check that error message and adjust the field lookups below if needed.
+    Call "Vehicle Details PRO" (abhiyanpa7) on RapidAPI.
+    Free tier: 10 requests/month. Pro: $9.99/mo for 2,500 requests.
+    Response envelope is double-nested: {"success", "source", "data": {"data": {...}}}.
     """
     if not RAPIDAPI_KEY:
         raise HTTPException(status_code=500, detail="RAPIDAPI_KEY not configured")
 
-    url = "https://vehicle-rc-verification1.p.rapidapi.com/api/rc_validation"
+    url = "https://vehicle-details-pro.p.rapidapi.com/"
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "vehicle-rc-verification1.p.rapidapi.com",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accesstoken": "128c74c863692303f82245f66e66f6842f6",
+        "x-rapidapi-host": "vehicle-details-pro.p.rapidapi.com",
+        "Content-Type": "application/json",
     }
-    payload = {"rc_number": rc_number.upper().replace(" ", "")}
+    params = {"reg_number": rc_number.upper().replace(" ", "")}
 
     try:
-        resp = _post_preserving_method(url, headers, payload, timeout=20)
-
-        if resp.status_code == 401 or resp.status_code == 403:
-            raise HTTPException(
-                status_code=502,
-                detail=f"RapidAPI authentication failed (HTTP {resp.status_code}). Check RAPIDAPI_KEY in Render's environment variables. Response: {resp.text[:300]}",
-            )
-        if resp.status_code == 429:
-            raise HTTPException(
-                status_code=502,
-                detail="RapidAPI rate limit or monthly quota exceeded. Check your plan usage on RapidAPI dashboard.",
-            )
-
-        try:
-            data = resp.json()
-        except ValueError:
-            raise HTTPException(
-                status_code=502,
-                detail=f"RC API returned non-JSON response (status {resp.status_code}): {resp.text[:300]}",
-            )
-
-        if resp.status_code != 200:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(data)[:400]}",
-            )
-
-        # This provider can return a top-level JSON array instead of an object
-        # (e.g. [] for "not found", or [{...}] wrapping a single result).
-        if isinstance(data, list):
-            if not data:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Could not find vehicle data for {rc_number}. API returned an empty list.",
-                )
-            if isinstance(data[0], dict):
-                data = data[0]
-            else:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"RC API returned an unexpected list shape: {json.dumps(data)[:400]}",
-                )
-
-        # Provider's exact response envelope wasn't visible at integration time —
-        # unwrap common wrapper patterns (data/result/response) if present.
-        result = data
-        for wrapper_key in ("data", "result", "response"):
-            wrapped = data.get(wrapper_key)
-            if isinstance(wrapped, dict):
-                result = wrapped
-                break
-            if isinstance(wrapped, list) and wrapped and isinstance(wrapped[0], dict):
-                result = wrapped[0]
-                break
-
-        def first_present(*keys, default=""):
-            for k in keys:
-                if result.get(k) not in (None, ""):
-                    return result.get(k)
-            return default
-
-        maker_model = first_present("maker_model", "vehicle_model", "model", "vehicleModel")
-        manufacturer_raw = first_present("manufacturer", "maker", "vehicle_manufacturer")
-
-        if not maker_model and not manufacturer_raw:
-            # Nothing recognizable came back — surface the raw shape for debugging
-            raise HTTPException(
-                status_code=502,
-                detail=f"RC API response didn't match expected fields. Raw response: {json.dumps(data)[:500]}",
-            )
-
-        if manufacturer_raw:
-            manufacturer, model_str = manufacturer_raw, maker_model
-        elif "/" in maker_model:
-            manufacturer, model_str = maker_model.split("/", 1)
-        else:
-            manufacturer, model_str = maker_model, ""
-
-        owner_sr_raw = first_present("ownership", "owner_sr", "owner_serial_number", "ownership_number", default="1")
-        try:
-            owner_sr = int(str(owner_sr_raw).strip() or "1")
-        except ValueError:
-            owner_sr = 1
-
-        return {
-            "rc_number": first_present("registration_no", "rc_number", "registration_number", default=rc_number),
-            "reg_date": first_present("registration_date", "reg_date", "regDate"),
-            "owner_name": first_present("owner_name", "ownerName"),
-            "fuel_type": str(first_present("fuel_type", "fuelType")).title(),
-            "vehicle_manufacturer": str(manufacturer).strip(),
-            "vehicle_model": str(model_str).strip(),
-            "owner_sr": owner_sr,
-            "rto_code": rc_number[:4].upper(),
-            "vehicle_class": first_present("vehicle_class", "vehicleClass", "vh_class_desc"),
-            "insurance_validity": first_present("insurance_upto", "insurance_validity", "insuranceUpto"),
-            "fitness_upto": first_present("fitness_upto", "fitnessUpto"),
-            "financer": first_present("financier_name", "financer", "financerName"),
-            "color": first_present("vehicle_color", "color", "vehicleColor"),
-            "rc_status": first_present("rc_status", "status", "rcStatus"),
-            "body_type": first_present("body_type_desc", "body_type", "bodyType"),
-        }
+        resp = requests.get(url, headers=headers, params=params, timeout=20)
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"RC API call failed: {str(e)}")
+
+    if resp.status_code == 401 or resp.status_code == 403:
+        raise HTTPException(
+            status_code=502,
+            detail=f"RapidAPI authentication failed (HTTP {resp.status_code}). Check RAPIDAPI_KEY in Render's environment variables. Response: {resp.text[:300]}",
+        )
+    if resp.status_code == 429:
+        raise HTTPException(
+            status_code=502,
+            detail="RapidAPI rate limit or monthly quota exceeded (free tier is 10 requests/month). Check your plan usage on RapidAPI dashboard.",
+        )
+
+    try:
+        envelope = resp.json()
+    except ValueError:
+        raise HTTPException(
+            status_code=502,
+            detail=f"RC API returned non-JSON response (status {resp.status_code}): {resp.text[:300]}",
+        )
+
+    if resp.status_code != 200 or not envelope.get("success"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(envelope)[:400]}",
+        )
+
+    # Envelope is double-nested: envelope["data"]["data"] holds the actual fields
+    outer = envelope.get("data") or {}
+    data = outer.get("data") if isinstance(outer.get("data"), dict) else outer
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not find vehicle data for {rc_number}. Response: {json.dumps(envelope)[:400]}",
+        )
+
+    blacklist_status = data.get("blacklistStatus", "") or ""
+    blacklist_details = data.get("blacklistDetails") or []
+    # Provider uses "NA" (string) as a sentinel for "no blacklist", not an empty value
+    is_blacklisted = blacklist_status.strip().upper() not in ("", "NA", "NOT BLACKLISTED")
+    blacklist_reason = ""
+    if is_blacklisted and isinstance(blacklist_details, list) and blacklist_details:
+        first = blacklist_details[0]
+        if isinstance(first, str) and first.upper() != "NA":
+            blacklist_reason = first
+        elif isinstance(first, dict):
+            blacklist_reason = first.get("reason", "")
+
+    owner_count_raw = data.get("ownerCount", "1")
+    try:
+        owner_sr = int(str(owner_count_raw).strip() or "1")
+    except ValueError:
+        owner_sr = 1
+
+    return {
+        "rc_number": data.get("regNo", rc_number),
+        "reg_date": data.get("regDate", ""),
+        "owner_name": data.get("owner", ""),
+        "fuel_type": (data.get("type", "") or "").title(),
+        "vehicle_manufacturer": data.get("vehicleManufacturerName", ""),
+        "vehicle_model": data.get("model", ""),
+        "owner_sr": owner_sr,
+        "rto_code": data.get("rtoCode", rc_number[:4].upper()),
+        "vehicle_class": data.get("vehicleClass", ""),
+        "insurance_validity": data.get("vehicleInsuranceUpto", ""),
+        "fitness_upto": data.get("rcExpiryDate", ""),
+        "financer": data.get("rcFinancer", "") or "",
+        "color": data.get("vehicleColour", ""),
+        "rc_status": data.get("status", ""),
+        "body_type": data.get("bodyType", ""),
+        "is_commercial": bool(data.get("isCommercial", False)),
+        "blacklist_status": "Blacklisted" if is_blacklisted else "Not Blacklisted",
+        "blacklist_reason": blacklist_reason,
+        # This provider doesn't return challan data — default to no pending challan
+        "pending_challan": False,
+        "challan_amount": "",
+    }
 
 
 # ─── Gemini AI (Normalize + Price Research) ─────────────────────────
@@ -424,6 +372,17 @@ async def valuate(req: ValuationRequest):
     # Step 6: AI-generated explanation
     explanation = generate_explanation(rc_data, gemini_result, valuation)
 
+    # Surface blacklist/challan warnings from the RC data alongside Gemini's own flags
+    flags = list(gemini_result.get("flags", []))
+    if rc_data.get("blacklist_status", "").strip().lower() == "blacklisted":
+        reason = rc_data.get("blacklist_reason", "")
+        flags.append(f"⛔ Vehicle is BLACKLISTED{f' — {reason}' if reason else ''}. Verify carefully before proceeding.")
+    if rc_data.get("pending_challan"):
+        amount = rc_data.get("challan_amount", "")
+        flags.append(f"⚠️ Pending traffic challan{f' of ₹{amount}' if amount else ''} on this vehicle.")
+    if rc_data.get("is_commercial"):
+        flags.append("ℹ️ Registered as a commercial vehicle — resale dynamics differ from private vehicles.")
+
     # Build response
     return {
         "vehicle": {
@@ -443,7 +402,7 @@ async def valuate(req: ValuationRequest):
         "valuation": valuation,
         "price_research": price_research,
         "explanation": explanation,
-        "flags": gemini_result.get("flags", []),
+        "flags": flags,
         "disclaimer": "This is an estimated market range based on current listings. Actual value depends on physical condition, service history, and negotiation. Condition-based deductions are NOT included.",
     }
 
