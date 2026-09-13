@@ -156,6 +156,143 @@ def get_city_tier(rto_code: str) -> str:
     return "tier3"
 
 
+# ─── Transmission Premium ───────────────────────────────────────────
+
+def calc_transmission_adjustment(variant: str) -> dict:
+    """
+    Automatic variants (AT/AMT/CVT/DCT) command a resale premium over manual.
+    Flat, deterministic percentage — not researched per-query, so the same
+    car always gets the same adjustment regardless of what Gemini's search
+    happens to return that day.
+    """
+    variant_upper = (variant or "").upper()
+    auto_markers = ("AMT", "AT", "CVT", "DCT", "AUTOMATIC")
+    tokens = variant_upper.replace("+", " ").split()
+    is_automatic = any(marker in tokens for marker in auto_markers) or "AUTOMATIC" in variant_upper
+
+    if is_automatic:
+        return {"multiplier": 1.06, "label": "Automatic transmission (+6%)", "is_automatic": True}
+    return {"multiplier": 1.00, "label": "Manual transmission", "is_automatic": False}
+
+
+# ─── Asking-Price Haircut ────────────────────────────────────────────
+
+ASKING_PRICE_HAIRCUT = 0.06  # Indian listings are typically asking prices, not transaction prices
+
+def apply_asking_price_haircut(low: float, high: float, median: float) -> dict:
+    """
+    Online listings are sellers' asking prices, not what cars actually sell
+    for — Indian used-car negotiation norms mean the real transaction price
+    is typically a bit below the listed price. Applied uniformly before any
+    other adjustment.
+    """
+    factor = 1 - ASKING_PRICE_HAIRCUT
+    return {
+        "low_lakh": round(low * factor, 2),
+        "high_lakh": round(high * factor, 2),
+        "median_lakh": round(median * factor, 2),
+        "haircut_pct": ASKING_PRICE_HAIRCUT * 100,
+    }
+
+
+# ─── Confidence Band (sample size) ──────────────────────────────────
+
+def calc_confidence_band(listings_count) -> dict:
+    """
+    Widen the range when few comparables were found (low confidence),
+    tighten it slightly when many were found (high confidence). Adjusts
+    the SPREAD around the median, not the median itself.
+    """
+    try:
+        n = int(listings_count)
+    except (TypeError, ValueError):
+        n = 0
+
+    if n < 5:
+        return {"band_multiplier": 1.15, "confidence": "low", "listings_count": n,
+                "label": f"Low confidence ({n} comparable listing{'s' if n != 1 else ''} found) — range widened"}
+    elif n < 15:
+        return {"band_multiplier": 1.0, "confidence": "medium", "listings_count": n,
+                "label": f"Medium confidence ({n} comparable listings found)"}
+    else:
+        return {"band_multiplier": 0.9, "confidence": "high", "listings_count": n,
+                "label": f"High confidence ({n} comparable listings found) — range tightened"}
+
+
+def apply_confidence_band(low: float, high: float, median: float, band_multiplier: float) -> dict:
+    """Widen/tighten low-high spread around the median by band_multiplier."""
+    new_low = median - (median - low) * band_multiplier
+    new_high = median + (high - median) * band_multiplier
+    return {"low_lakh": round(new_low, 2), "high_lakh": round(new_high, 2), "median_lakh": round(median, 2)}
+
+
+# ─── Depreciation-Formula Cross-Check ────────────────────────────────
+# Independent estimate from ex-showroom price + a fixed depreciation curve
+# (loosely IRDAI-style). Not used to compute the final number — shown
+# alongside the live-listing estimate as a sanity-check / second opinion.
+
+def calc_depreciation_formula_value(ex_showroom_lakh: float, age_years: float) -> dict:
+    if age_years <= 0.5:
+        dep_pct = 5 + (age_years / 0.5) * 10       # 5% -> 15%
+    elif age_years <= 1:
+        dep_pct = 15 + (age_years - 0.5) / 0.5 * 5  # 15% -> 20%
+    elif age_years <= 2:
+        dep_pct = 20 + (age_years - 1) * 10         # 20% -> 30%
+    elif age_years <= 3:
+        dep_pct = 30 + (age_years - 2) * 10         # 30% -> 40%
+    elif age_years <= 4:
+        dep_pct = 40 + (age_years - 3) * 10         # 40% -> 50%
+    elif age_years <= 5:
+        dep_pct = min(50 + (age_years - 4) * 10, 55)  # 50% -> 55% (capped)
+    else:
+        dep_pct = 55 + min((age_years - 5) * 8, 30)  # +8%/yr beyond 5yr, capped
+
+    dep_pct = min(dep_pct, 85)  # floor value: never depreciate below 15% of ex-showroom
+    value = ex_showroom_lakh * (1 - dep_pct / 100)
+    return {"formula_value_lakh": round(value, 2), "depreciation_pct": round(dep_pct, 1)}
+
+
+def get_ex_showroom_price(catalog: dict, model: str, generation: str) -> float:
+    """Look up ex_showroom_base_lakh for a model+generation from the catalog. Returns 0 if not found."""
+    for m in catalog.get("models", []):
+        if m.get("model", "").strip().lower() == (model or "").strip().lower():
+            for g in m.get("generations", []):
+                if g.get("gen", "").strip().lower() == (generation or "").strip().lower():
+                    return g.get("ex_showroom_base_lakh", 0)
+            # generation not matched — fall back to the first generation's price as a rough anchor
+            if m.get("generations"):
+                return m["generations"][0].get("ex_showroom_base_lakh", 0)
+    return 0
+
+
+def calc_cross_check(catalog: dict, model: str, generation: str, age_years: float, live_median_lakh: float) -> dict:
+    """
+    Compare the depreciation-formula estimate against the live-listing median.
+    Always returned (per product decision) — not just when they diverge.
+    """
+    ex_showroom = get_ex_showroom_price(catalog, model, generation)
+    if not ex_showroom:
+        return {"available": False}
+
+    formula = calc_depreciation_formula_value(ex_showroom, age_years)
+    formula_value = formula["formula_value_lakh"]
+
+    if live_median_lakh > 0:
+        divergence_pct = round(((live_median_lakh - formula_value) / live_median_lakh) * 100, 1)
+    else:
+        divergence_pct = 0.0
+
+    return {
+        "available": True,
+        "ex_showroom_lakh": ex_showroom,
+        "formula_value_lakh": formula_value,
+        "depreciation_pct": formula["depreciation_pct"],
+        "live_market_median_lakh": live_median_lakh,
+        "divergence_pct": divergence_pct,
+        "significant_divergence": abs(divergence_pct) > 25,
+    }
+
+
 # ─── Final Valuation Composer ───────────────────────────────────────
 
 def compute_valuation(
@@ -167,32 +304,56 @@ def compute_valuation(
     fuel_type: str,
     owner_sr: int,
     rto_code: str,
+    variant: str = "",
+    listings_count = None,
+    model: str = "",
+    generation: str = "",
 ) -> dict:
     """
     Apply all deterministic adjustments on top of AI-researched market prices.
-    Market prices already reflect age-based depreciation, so we only adjust
-    for user-specific factors: KM usage, ownership count, regulatory risk.
 
-    Returns the final adjusted range + full breakdown.
+    Order of operations:
+      1. Asking-price haircut (listings are asking prices, not sale prices)
+      2. Confidence-band widening/tightening (based on comparable count)
+      3. Car-specific multipliers: usage, ownership, transmission, regulatory
+    The depreciation-formula cross-check is computed independently and never
+    feeds into the final number — it's a second opinion shown alongside it.
     """
+    # Step 1: haircut on the raw market figures
+    haircut = apply_asking_price_haircut(market_low, market_high, market_median)
+
+    # Step 2: confidence-based band adjustment around the (haircut) median
+    confidence = calc_confidence_band(listings_count)
+    banded = apply_confidence_band(
+        haircut["low_lakh"], haircut["high_lakh"], haircut["median_lakh"],
+        confidence["band_multiplier"],
+    )
+
+    # Step 3: car-specific multipliers
     usage = calc_usage_adjustment(km_run, age_years, fuel_type)
     ownership = calc_ownership_multiplier(owner_sr)
+    transmission = calc_transmission_adjustment(variant)
     regulatory = check_regulatory(fuel_type, age_years, rto_code)
     city_tier = get_city_tier(rto_code)
 
     combined_multiplier = (
         usage["multiplier"]
         * ownership["multiplier"]
+        * transmission["multiplier"]
         * regulatory["multiplier"]
     )
 
-    adjusted_low = round(market_low * combined_multiplier, 2)
-    adjusted_high = round(market_high * combined_multiplier, 2)
-    adjusted_median = round(market_median * combined_multiplier, 2)
+    adjusted_low = round(banded["low_lakh"] * combined_multiplier, 2)
+    adjusted_high = round(banded["high_lakh"] * combined_multiplier, 2)
+    adjusted_median = round(banded["median_lakh"] * combined_multiplier, 2)
 
     # Ensure low <= median <= high
     adjusted_low = min(adjusted_low, adjusted_median)
     adjusted_high = max(adjusted_high, adjusted_median)
+
+    # Depreciation-formula cross-check — independent, always computed, never
+    # feeds back into the number above
+    cross_check = calc_cross_check(CATALOG, model, generation, age_years, market_median)
 
     return {
         "final_range": {
@@ -206,11 +367,15 @@ def compute_valuation(
             "median_lakh": market_median,
         },
         "adjustments": {
+            "haircut": haircut,
+            "confidence": confidence,
             "usage": usage,
             "ownership": ownership,
+            "transmission": transmission,
             "regulatory": regulatory,
             "combined_multiplier": round(combined_multiplier, 4),
         },
+        "cross_check": cross_check,
         "meta": {
             "age_years": age_years,
             "km_run": km_run,
@@ -218,5 +383,6 @@ def compute_valuation(
             "owner_sr": owner_sr,
             "rto_code": rto_code,
             "city_tier": city_tier,
+            "variant": variant,
         },
     }
