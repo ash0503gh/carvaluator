@@ -17,11 +17,11 @@ AI-powered Maruti Suzuki used car valuation tool. Enter a registration number an
 - Go to [Google AI Studio](https://aistudio.google.com/apikey)
 - Create a free API key
 
-**RapidAPI (RTO Vehicle Information India):**
+**RapidAPI (Vehicle RC Verification):**
 - Sign up at [RapidAPI](https://rapidapi.com)
-- Subscribe to [RTO Vehicle Information India](https://rapidapi.com/streamifyworld/api/rto-vehicle-information-india) by eccentriclabs (free plan)
+- Subscribe to [Vehicle RC Verification](https://rapidapi.com/zapfintek/api/vehicle-rc-verification1) by zapfintek (free tier: 500,000 requests/month, 1000/hour rate limit)
 - Copy your API key
-- Synchronous single-call API — sends `{vehicle_no, consent, consent_text}`, returns vehicle data directly (no task/poll flow)
+- Synchronous single-call API — sends `rc_number` as form-urlencoded, returns vehicle data directly (no task/poll flow)
 
 ### 2. Local Development
 
@@ -30,7 +30,7 @@ cp .env.example .env
 # Edit .env with your API keys
 
 pip install -r requirements.txt
-uvicorn main_v1:app --reload --port 8000
+uvicorn main_v3:app --reload --port 8000
 ```
 
 Open `http://localhost:8000`
@@ -40,7 +40,7 @@ Open `http://localhost:8000`
 - Push to GitHub
 - Create a new **Web Service** on Render
 - Set environment variables: `GEMINI_API_KEY`, `RAPIDAPI_KEY`
-- Start command: `uvicorn main_v1:app --host 0.0.0.0 --port $PORT`
+- Start command: `uvicorn main_v3:app --host 0.0.0.0 --port $PORT`
 
 ## Valuation Logic
 
@@ -57,7 +57,7 @@ Condition-based deductions are applied manually by the user after seeing the res
 ## File Structure
 
 ```
-main_v1.py              FastAPI backend
+main_v3.py              FastAPI backend
 valuation_v1.py         Deterministic valuation math
 maruti_catalog_v1.json  Model/generation/variant catalog (2010+)
 index.html              Frontend
