@@ -3,179 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarValuator — Know what your car is worth</title>
+    <title>CarValuator</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<div class="app-shell">
+<div class="shell">
 
-    <!-- Header -->
-    <header class="header">
-        <div class="wordmark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M3 12.5L4.8 7.4C5.1 6.5 6 6 6.9 6H17.1C18 6 18.9 6.5 19.2 7.4L21 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                <rect x="2" y="12.5" width="20" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="6.5" cy="18.5" r="1.6" fill="currentColor"/>
-                <circle cx="17.5" cy="18.5" r="1.6" fill="currentColor"/>
-            </svg>
-            <span>CarValuator</span>
-        </div>
+    <header class="topbar">
+        <span class="topbar-name">CarValuator</span>
     </header>
 
-    <!-- Input Section -->
-    <main class="main-content">
-        <section class="input-section">
+    <main>
+        <!-- Hero input -->
+        <section class="hero">
             <h1>What's your car worth?</h1>
-            <p class="input-subtitle">Enter your registration number and odometer reading. We'll check current listings and work out a fair valuation range.</p>
+            <p class="hero-sub">Enter your registration number and odometer. We check live listings and calculate a fair range.</p>
 
-            <div class="field-group">
-                <label for="rc-number" class="field-label">Registration number</label>
-                <div class="plate-wrapper">
-                    <div class="plate-strip">
-                        <span class="plate-strip-star">★</span>
-                        <span class="plate-strip-text">IND</span>
+            <div class="input-stack">
+                <label class="label" for="rc-number">Registration number</label>
+                <div class="plate" id="plate-wrap">
+                    <div class="plate-badge">
+                        <span class="plate-badge-emblem">★</span>
+                        <span class="plate-badge-country">IND</span>
                     </div>
-                    <input
-                        type="text"
-                        id="rc-number"
-                        class="plate-input"
-                        placeholder="KA 01 AB 1234"
-                        maxlength="13"
-                        autocomplete="off"
-                        spellcheck="false"
-                    >
+                    <input id="rc-number" class="plate-field" type="text" placeholder="KA 01 AB 1234" maxlength="13" autocomplete="off" spellcheck="false">
                 </div>
-                <span class="field-hint">As shown on your number plate</span>
-            </div>
 
-            <div class="field-group">
-                <label for="km-run" class="field-label">Odometer reading (km)</label>
-                <input
-                    type="number"
-                    id="km-run"
-                    class="km-input"
-                    placeholder="45000"
-                    min="0"
-                    max="999999"
-                >
-                <span class="field-hint">Current reading from your dashboard</span>
-            </div>
+                <label class="label" for="km-run">Odometer (km)</label>
+                <input id="km-run" class="text-field" type="number" placeholder="45,000" min="0" max="999999">
 
-            <button id="valuate-btn" onclick="submitValuation()">
-                <span class="btn-text">Get Valuation</span>
-                <span class="btn-loader" style="display:none;">
-                    <span class="spinner"></span>
-                    <span id="loading-message">Reading registration details</span>
-                </span>
-            </button>
+                <button id="valuate-btn" class="cta" onclick="submitValuation()">
+                    <span class="cta-label">Get Valuation</span>
+                    <span class="cta-loading" style="display:none">
+                        <span class="dot-loader"></span>
+                        <span id="loading-msg">Reading registration details</span>
+                    </span>
+                </button>
+            </div>
         </section>
 
-        <!-- Error Display -->
-        <div id="error-container" class="error-container" style="display:none;">
-            <p id="error-message"></p>
+        <!-- Error -->
+        <div id="error-box" class="error-box" style="display:none">
+            <p id="error-msg"></p>
         </div>
 
-        <!-- Results Section -->
-        <section id="results" class="results-section" style="display:none;">
+        <!-- Results -->
+        <section id="results" style="display:none">
 
-            <!-- Vehicle Identity -->
-            <div class="vehicle-identity">
-                <div class="vehicle-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <path d="M3 12.5L4.8 7.4C5.1 6.5 6 6 6.9 6H17.1C18 6 18.9 6.5 19.2 7.4L21 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        <rect x="2" y="12.5" width="20" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
-                        <circle cx="6.5" cy="18.5" r="1.6" fill="currentColor"/>
-                        <circle cx="17.5" cy="18.5" r="1.6" fill="currentColor"/>
-                    </svg>
-                </div>
-                <div class="vehicle-identity-text">
-                    <h2 id="vehicle-title">—</h2>
-                    <div class="vehicle-meta" id="vehicle-meta"></div>
-                </div>
-                <span class="confidence-badge" id="confidence-badge">—</span>
+            <!-- Vehicle -->
+            <div class="card vehicle-card">
+                <h2 id="vehicle-title" class="vehicle-title">—</h2>
+                <div class="tags" id="vehicle-meta"></div>
+                <span class="match-pill" id="confidence-badge">—</span>
             </div>
 
-            <!-- Gauge / Price Reveal -->
-            <div class="gauge-card">
-                <div class="gauge-wrap">
-                    <svg class="gauge-svg" viewBox="0 0 240 130" id="gauge-svg">
-                        <path d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke="var(--graphite-750)" stroke-width="14" stroke-linecap="round"/>
-                        <path d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke="var(--brass-500)" stroke-width="14" stroke-linecap="round"
-                              stroke-dasharray="314" stroke-dashoffset="314" id="gauge-arc"/>
-                        <g id="gauge-needle" style="transform-origin: 120px 120px;">
-                            <line x1="120" y1="120" x2="120" y2="38" stroke="var(--ivory-100)" stroke-width="3" stroke-linecap="round"/>
-                            <circle cx="120" cy="120" r="7" fill="var(--ivory-100)"/>
-                        </g>
-                    </svg>
-                    <div class="gauge-value">
-                        <div class="gauge-price" id="gauge-price">₹0.00L</div>
-                        <div class="gauge-price-label">estimated value</div>
+            <!-- Price hero -->
+            <div class="card price-card">
+                <div class="price-hero">
+                    <span class="price-currency">₹</span>
+                    <span class="price-number" id="price-number">0.00</span>
+                    <span class="price-unit">Lakh</span>
+                </div>
+                <p class="price-label">Estimated market value</p>
+
+                <div class="range-track-wrap">
+                    <div class="range-track">
+                        <div class="range-fill" id="range-fill"></div>
+                        <div class="range-dot" id="range-dot"></div>
+                    </div>
+                    <div class="range-ends">
+                        <span id="range-low">—</span>
+                        <span id="range-high">—</span>
                     </div>
                 </div>
-                <div class="gauge-range-labels">
-                    <span id="range-low">—</span>
-                    <span id="range-high">—</span>
-                </div>
 
-                <div class="source-badges" id="source-badges"></div>
+                <div class="sources" id="source-badges"></div>
             </div>
 
-            <!-- Adjustments Breakdown -->
-            <div class="breakdown-card">
-                <h3>How we got this number</h3>
-                <div class="breakdown-list" id="adjustment-grid"></div>
-                <p class="seller-type-note" id="seller-type-note" style="display:none;"></p>
+            <!-- Breakdown -->
+            <div class="card">
+                <h3 class="section-title">How we got this number</h3>
+                <div id="adjustment-grid"></div>
+                <p class="seller-note" id="seller-type-note" style="display:none"></p>
             </div>
 
-            <!-- Depreciation-Formula Cross-Check -->
-            <div class="cross-check-card" id="cross-check-card" style="display:none;">
-                <h3>Second opinion</h3>
-                <div class="cc-comparison">
-                    <div class="cc-column">
-                        <div class="cc-label">Depreciation formula</div>
-                        <div class="cc-value" id="cc-formula-value">—</div>
-                        <div class="cc-detail" id="cc-formula-detail">—</div>
+            <!-- Cross-check (only shown when divergence > 25%) -->
+            <div class="card card-warn" id="cross-check-card" style="display:none">
+                <h3 class="section-title">Worth a second look</h3>
+                <p class="cc-intro" id="cc-intro"></p>
+                <div class="cc-pair">
+                    <div class="cc-box">
+                        <div class="cc-box-label">Formula estimate</div>
+                        <div class="cc-box-value" id="cc-formula-value">—</div>
+                        <div class="cc-box-note" id="cc-formula-detail">—</div>
                     </div>
-                    <div class="cc-vs">vs</div>
-                    <div class="cc-column">
-                        <div class="cc-label">Live market (median)</div>
-                        <div class="cc-value" id="cc-market-value">—</div>
-                        <div class="cc-detail">From current listings</div>
+                    <div class="cc-box">
+                        <div class="cc-box-label">Live market</div>
+                        <div class="cc-box-value" id="cc-market-value">—</div>
+                        <div class="cc-box-note">Current listings</div>
                     </div>
                 </div>
-                <p class="cc-divergence" id="cc-divergence">—</p>
             </div>
 
-            <!-- Flags & Warnings -->
-            <div class="notices-card" id="flags-card" style="display:none;">
-                <h3>Notices</h3>
+            <!-- Notices -->
+            <div class="card card-alert" id="flags-card" style="display:none">
+                <h3 class="section-title">Notices</h3>
                 <div id="flags-list"></div>
             </div>
 
             <!-- Explanation -->
-            <div class="explanation-card">
+            <div class="card">
                 <p class="explanation" id="explanation">—</p>
-                <div class="explanation-actions">
-                    <button class="text-btn" id="copy-btn" onclick="copySummary()">Copy summary</button>
-                    <button class="text-btn" id="share-btn" onclick="shareSummary()">Share</button>
+                <div class="action-row">
+                    <button class="link-btn" id="copy-btn" onclick="copySummary()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy summary
+                    </button>
+                    <button class="link-btn" id="share-btn" onclick="shareSummary()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                        Share
+                    </button>
                 </div>
             </div>
 
-            <!-- Disclaimer -->
-            <p class="disclaimer" id="disclaimer"></p>
-
+            <p class="fine-print" id="disclaimer"></p>
         </section>
     </main>
 
     <footer class="footer">
-        <p>Estimates are based on current listings, not a certified appraisal.</p>
+        <p>Estimates based on current listings. Not a certified appraisal.</p>
     </footer>
-
 </div>
 
-<script src="app_v3.js"></script>
+<script src="app_v4.js"></script>
 </body>
 </html>
