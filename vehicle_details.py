@@ -332,7 +332,7 @@ def scrape_vehicle(registration_number: str, timeout: float = 10.0) -> LookupRes
             success=False,
             registration_number=clean_reg,
             lookup_time_ms=round(elapsed, 2),
-            error_message=f"Vehicle '{clean_reg}' not found in Vahan / RTO registries."
+            error_message=f"Vehicle '{clean_reg}' not found. Please check the registration number."
         )
 
     if c24_data:

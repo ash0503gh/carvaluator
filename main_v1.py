@@ -118,7 +118,7 @@ def call_gemini(rc_data: dict, km_run: int) -> dict:
     3. Return structured JSON
     """
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="Valuation service configuration error. Please contact support.")
 
     # Build a compact catalog summary for the prompt.
     # Full variant list (not truncated) so uncommon trims — e.g. "Strong Hybrid
@@ -160,11 +160,11 @@ YOUR TASKS:
    - If variant is not explicitly clear, provide the most plausible trim or "Standard / Base".
 
 2. PRICE RESEARCH: Search for the current used car market price for this specific vehicle in India.
-   - Search across top Indian used car platforms: CarDekho, Cars24, Spinny, OLX, CarWale, and Orange Book Value.
+   - Search across top Indian used car listings and market portals.
    - Search for the specific model + variant + registration year + fuel type (e.g. "Honda City ZX 2017 price used", "Mahindra Thar LX AT 2021 used price").
    - Report realistic asking prices in Lakhs (₹).
 
-3. SEGMENT BY SELLER TYPE: Note whether prices differ between private-party sellers vs dealer-certified listings (e.g., Spinny Assured, Cars24 Assured, Toyota U-Trust, Maruti True Value). Report this as a brief note.
+3. SEGMENT BY SELLER TYPE: Note whether prices differ between private-party sellers vs dealer-certified listings. Report this as a brief generic note. NEVER mention any specific website, brand, or platform names.
 
 4. Return your response as ONLY a valid JSON object (no markdown formatting, no backticks, no conversational text outside JSON):
 
@@ -181,11 +181,11 @@ YOUR TASKS:
     "low_lakh": 7.5,
     "high_lakh": 9.2,
     "median_lakh": 8.3,
-    "sources_checked": ["CarDekho", "Cars24", "OLX", "Spinny"],
+    "sources_checked": ["Online Marketplaces", "Dealer Networks"],
     "listings_found_approx": 15,
     "searched_variant_specifically": true,
-    "price_basis": "Brief explanation of how you arrived at this range based on current listings",
-    "seller_type_note": "Brief note on private-party vs dealer-certified pricing"
+    "price_basis": "Brief explanation of how you arrived at this range without naming websites or portals",
+    "seller_type_note": "Brief generic note on private-party vs dealer-certified pricing without naming websites or portals"
   }},
   "flags": ["any observations or warnings"],
   "match_notes": "Brief explanation of how the vehicle was identified"
@@ -193,6 +193,7 @@ YOUR TASKS:
 
 CRITICAL INSTRUCTIONS:
 - You MUST evaluate ANY passenger car brand sold in India. NEVER refuse a request because it is not Maruti.
+- NEVER include the name of any company, marketplace, website, or third-party platform (such as CarDekho, Cars24, Spinny, OLX, CarWale, etc.) anywhere in your output.
 - Always output strict JSON matching the schema above.
 - All prices in Lakhs (₹).
 - Do NOT include condition-based adjustments — the backend handles those separately.
@@ -206,11 +207,6 @@ CRITICAL INSTRUCTIONS:
         "generationConfig": {
             "temperature": 0.1,
             "maxOutputTokens": 8192,
-            # Gemini 2.5's internal "thinking" tokens count against maxOutputTokens.
-            # With search grounding active, thinking can consume most of a small
-            # budget before the final JSON is written, truncating it. This task
-            # is extraction + light reasoning, not deep multi-step thought, so
-            # disabling thinking leaves the full budget for the actual answer.
             "thinkingConfig": {"thinkingBudget": 0},
         },
     }
@@ -220,14 +216,13 @@ CRITICAL INSTRUCTIONS:
         data = resp.json()
 
         if resp.status_code != 200:
-            error_msg = data.get("error", {}).get("message", "Unknown Gemini API error")
-            raise HTTPException(status_code=502, detail=f"Gemini API error: {error_msg}")
+            raise HTTPException(status_code=502, detail="Market valuation service temporarily unavailable. Please try again.")
 
         # Extract text from response - handle multiple content parts
         text_parts = []
         candidates = data.get("candidates", [])
         if not candidates:
-            raise HTTPException(status_code=502, detail="No response from Gemini")
+            raise HTTPException(status_code=502, detail="No response received from market valuation service. Please try again.")
 
         finish_reason = candidates[0].get("finishReason", "")
 
@@ -248,20 +243,17 @@ CRITICAL INSTRUCTIONS:
             if finish_reason == "MAX_TOKENS":
                 raise HTTPException(
                     status_code=502,
-                    detail=(
-                        "Gemini's response was cut off before finishing (hit the token limit). "
-                        f"Raw (truncated): {raw_text[:500]}"
-                    ),
+                    detail="Market valuation response was truncated. Please try again.",
                 )
             raise  # re-raise to be caught by the outer handler below with full context
 
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini returned non-JSON response. Raw: {raw_text[:500]}",
+            detail="Failed to parse market valuation data. Please try again.",
         )
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Gemini API call failed: {str(e)}")
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=502, detail="Market valuation service request failed. Please try again.")
 
 
 # ─── Generate Explanation (Gemini) ──────────────────────────────────
@@ -384,8 +376,7 @@ async def valuate(req: ValuationRequest):
             status_code=422,
             detail=(
                 "Could not determine a complete market price range for this vehicle. "
-                f"Gemini returned: low={market_low}, high={market_high}, median={market_median}. "
-                "The model may be too rare or comparable listings weren't found."
+                "The model or variant may be rare or recent comparable listings were not found."
             ),
         )
 
@@ -450,7 +441,6 @@ async def valuate(req: ValuationRequest):
             "confidence": gemini_result.get("confidence", 0),
             "total_challans": rc_data.get("total_challans", 0),
             "total_challan_amount": rc_data.get("total_challan_amount", 0.0),
-            "provider": rc_data.get("provider", ""),
         },
         "valuation": valuation,
         "price_research": price_research,

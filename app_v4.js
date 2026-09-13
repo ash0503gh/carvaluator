@@ -77,9 +77,18 @@ async function submitValuation() {
     }
 }
 
+function sanitizeMsg(msg) {
+    if (!msg) return "Unable to complete valuation. Please verify your details and try again.";
+    return msg
+        .replace(/\b(gemini|google|cars24|carinfo|spinny|cardekho|carwale|olx|vahan)\b/gi, "")
+        .replace(/https?:\/\/\S+/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
+
 function showErr(msg) {
     const box = document.getElementById("error-box");
-    document.getElementById("error-msg").textContent = msg;
+    document.getElementById("error-msg").textContent = sanitizeMsg(msg);
     box.style.display = "block";
     box.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -144,11 +153,6 @@ function render(data) {
         }, 60);
     });
 
-    // Sources
-    const srcEl = document.getElementById("source-badges");
-    const sources = pr.sources_checked && pr.sources_checked.length ? pr.sources_checked : ["CarDekho", "Cars24", "OLX"];
-    srcEl.innerHTML = sources.map(s => `<span class="source-pill">${I.check} ${s}</span>`).join("");
-
     // Breakdown
     const grid = document.getElementById("adjustment-grid");
     const rows = [
@@ -194,11 +198,6 @@ function render(data) {
                 <div class="adj-note">${r.note}</div>
             </div>
         </div>`).join("");
-
-    // Seller note
-    const sn = document.getElementById("seller-type-note");
-    if (pr.seller_type_note) { sn.textContent = pr.seller_type_note; sn.style.display = "block"; }
-    else sn.style.display = "none";
 
     // Cross-check — only shown when divergence > 25%
     const ccCard = document.getElementById("cross-check-card");
