@@ -103,9 +103,10 @@ function render(data) {
     badge.className = "match-pill " + (conf >= 0.85 ? "match-high" : conf >= 0.6 ? "match-med" : "match-low");
 
     const metaEl = document.getElementById("vehicle-meta");
+    const ownerLabel = v.owner_count === 1 ? "1st Owner" : v.owner_count === 2 ? "2nd Owner" : v.owner_count === 3 ? "3rd Owner" : `${v.owner_count}th Owner`;
     const metaTags = [
         v.rc_number, v.fuel_type, v.body_type,
-        `${v.owner_count} owner${v.owner_count > 1 ? "s" : ""}`,
+        ownerLabel,
         val.meta.km_run.toLocaleString("en-IN") + " km",
         val.meta.age_years.toFixed(1) + " yrs",
     ];
