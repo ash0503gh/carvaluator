@@ -222,7 +222,13 @@ IMPORTANT:
         "tools": [{"google_search": {}}],
         "generationConfig": {
             "temperature": 0.1,
-            "maxOutputTokens": 2048,
+            "maxOutputTokens": 8192,
+            # Gemini 2.5's internal "thinking" tokens count against maxOutputTokens.
+            # With search grounding active, thinking can consume most of a small
+            # budget before the final JSON is written, truncating it. This task
+            # is extraction + light reasoning, not deep multi-step thought, so
+            # disabling thinking leaves the full budget for the actual answer.
+            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
 
@@ -240,6 +246,8 @@ IMPORTANT:
         if not candidates:
             raise HTTPException(status_code=502, detail="No response from Gemini")
 
+        finish_reason = candidates[0].get("finishReason", "")
+
         for part in candidates[0].get("content", {}).get("parts", []):
             if "text" in part:
                 text_parts.append(part["text"])
@@ -251,7 +259,18 @@ IMPORTANT:
         raw_text = re.sub(r"\s*```$", "", raw_text)
         raw_text = raw_text.strip()
 
-        return json.loads(raw_text)
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError:
+            if finish_reason == "MAX_TOKENS":
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "Gemini's response was cut off before finishing (hit the token limit). "
+                        f"Raw (truncated): {raw_text[:500]}"
+                    ),
+                )
+            raise  # re-raise to be caught by the outer handler below with full context
 
     except json.JSONDecodeError:
         raise HTTPException(
