@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from valuation_v1 import compute_valuation, calc_age_years, load_catalog
+from valuation_v2 import compute_valuation, calc_age_years, load_catalog
 
 load_dotenv()
 
@@ -151,12 +151,14 @@ def call_gemini(rc_data: dict, km_run: int) -> dict:
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
 
-    # Build a compact catalog summary for the prompt
+    # Build a compact catalog summary for the prompt.
+    # Full variant list (not truncated) so uncommon trims — e.g. "Strong Hybrid
+    # Alpha+" — aren't missed just because they weren't in the first 5 listed.
     catalog_summary = []
     for m in CATALOG["models"]:
         for g in m["generations"]:
             catalog_summary.append(
-                f"{m['model']} | {g['gen']} | {g['years'][0]}-{g['years'][1]} | {', '.join(g['fuel_types'])} | {', '.join(g['variants'][:5])}..."
+                f"{m['model']} | {g['gen']} | {g['years'][0]}-{g['years'][1]} | {', '.join(g['fuel_types'])} | {', '.join(g['variants'])}"
             )
 
     age_years = calc_age_years(rc_data["reg_date"]) if rc_data["reg_date"] else 0
@@ -181,11 +183,13 @@ MARUTI SUZUKI MODEL CATALOG:
 
 YOUR TASKS:
 
-1. NORMALIZE: Match the raw RC manufacturer/model string to the correct Maruti model, generation, and variant from the catalog above. Use registration year + fuel type to determine the correct generation. If variant cannot be determined from the RC string, set it to "Unknown".
+1. NORMALIZE: Match the raw RC manufacturer/model string to the correct Maruti model, generation, and variant from the catalog above. Use registration year + fuel type to determine the correct generation. The raw model string sometimes includes the variant/trim directly (e.g. "GRAND VITARA STRONG HYBRID ALPHA+") — extract it if present. If variant genuinely cannot be determined, set it to "Unknown".
 
-2. PRICE RESEARCH: Search for the current used car market price for this specific Maruti model, approximate year ({rc_data['reg_date'][:4] if rc_data['reg_date'] else 'unknown'}), and fuel type in India. Look at CarDekho, Cars24, OLX, Spinny, and Orange Book Value listings. Find what similar cars (same model, similar year, similar km range) are currently listed at.
+2. PRICE RESEARCH: Search for the current used car market price for this specific Maruti model in India. IMPORTANT: if you identified a specific variant/trim in step 1 (not "Unknown"), search for listings of THAT SPECIFIC VARIANT (e.g. "Swift VXI 2019", not just "Swift 2019") — different trims of the same model can differ by ₹0.5-1.5 lakh, so variant-specific search materially improves accuracy. Only fall back to model-only search (ignoring variant) if variant is "Unknown" or if variant-specific search returns too few results. Look at CarDekho, Cars24, OLX, Spinny, and Orange Book Value listings. Find what similar cars (same model, same variant if known, similar year, similar km range) are currently listed at.
 
-3. Return your response as ONLY a valid JSON object (no markdown formatting, no backticks, no explanation outside JSON):
+3. SEGMENT BY SELLER TYPE: Among the listings you found, note whether prices differ between private-party sellers (OLX, individual CarDekho/Cars24 listings) versus dealer-certified listings (Cars24 Assured, Spinny Assured, Maruti True Value) — certified listings typically run 5-10% higher. Report this as a brief note, not a separate numeric range.
+
+4. Return your response as ONLY a valid JSON object (no markdown formatting, no backticks, no explanation outside JSON):
 
 {{
   "model": "Swift",
@@ -202,7 +206,9 @@ YOUR TASKS:
     "median_lakh": 5.0,
     "sources_checked": ["CarDekho", "Cars24", "OLX"],
     "listings_found_approx": 15,
-    "price_basis": "Brief explanation of how you arrived at this range"
+    "searched_variant_specifically": true,
+    "price_basis": "Brief explanation of how you arrived at this range",
+    "seller_type_note": "Brief note on private-party vs dealer-certified price difference, if observed"
   }},
   "flags": ["any warnings or observations"],
   "match_notes": "explanation of how you matched the model"
@@ -283,32 +289,53 @@ IMPORTANT:
 
 # ─── Generate Explanation (Gemini) ──────────────────────────────────
 
-def generate_explanation(rc_data: dict, gemini_result: dict, valuation: dict) -> str:
+def generate_explanation(rc_data: dict, gemini_result: dict, valuation: dict, price_research: dict) -> str:
     """Ask Gemini to write a human-readable valuation summary."""
     if not GEMINI_API_KEY:
         return _fallback_explanation(rc_data, gemini_result, valuation)
 
-    prompt = f"""Write a concise, professional 3-4 sentence valuation summary for a used car buyer/seller in India.
+    cross_check = valuation.get("cross_check", {})
+    cross_check_line = ""
+    if cross_check.get("available"):
+        cross_check_line = (
+            f"DEPRECIATION-FORMULA CROSS-CHECK: A standard depreciation formula (based on the "
+            f"original ex-showroom price of ₹{cross_check['ex_showroom_lakh']:.2f}L and the car's age) "
+            f"independently estimates ₹{cross_check['formula_value_lakh']:.2f}L, versus the live-market "
+            f"estimate above. Mention both figures and briefly note the difference between them "
+            f"({cross_check['divergence_pct']:+.0f}%) — if it's large, suggest a plausible reason "
+            f"(e.g. strong resale demand, fuel type trends, or model reputation)."
+        )
+
+    seller_note = price_research.get("seller_type_note", "")
+
+    prompt = f"""Write a concise, professional 4-5 sentence valuation summary for a used car buyer/seller in India.
 
 VEHICLE: {gemini_result.get('registration_year', '')} Maruti Suzuki {gemini_result.get('model', '')} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})
 REGISTRATION: {rc_data['rc_number']} | {rc_data['owner_sr']} owner(s)
 KM RUN: {valuation['meta']['km_run']:,} km | Age: {valuation['meta']['age_years']:.1f} years
 
-MARKET BASE RANGE: ₹{valuation['market_base']['low_lakh']:.2f}L – ₹{valuation['market_base']['high_lakh']:.2f}L
+MARKET BASE RANGE (before haircut): ₹{valuation['market_base']['low_lakh']:.2f}L – ₹{valuation['market_base']['high_lakh']:.2f}L
 ADJUSTMENTS APPLIED:
+- Asking-price haircut: listings are asking prices, not sale prices, so {valuation['adjustments']['haircut']['haircut_pct']:.0f}% was deducted first
+- Confidence: {valuation['adjustments']['confidence']['label']}
 - Usage: {valuation['adjustments']['usage']['label']} (ratio: {valuation['adjustments']['usage']['ratio']})
 - Ownership: {valuation['adjustments']['ownership']['label']}
+- Transmission: {valuation['adjustments']['transmission']['label']}
 - Regulatory: {valuation['adjustments']['regulatory'].get('message') or 'No restrictions'}
 
 FINAL ESTIMATED RANGE: ₹{valuation['final_range']['low_lakh']:.2f}L – ₹{valuation['final_range']['high_lakh']:.2f}L
 
-Write naturally. Mention each adjustment factor briefly. End with a note that condition-based deductions are not included and should be assessed separately. Do NOT use markdown formatting. Keep it under 100 words."""
+{f"SELLER TYPE NOTE (private-party vs dealer-certified pricing): {seller_note}" if seller_note else ""}
+
+{cross_check_line}
+
+Write naturally, in flowing prose (not bullet points). Refer to the car only by its model and variant (e.g. "your Swift VXI") — do NOT say "Maruti Suzuki", "Maruti", or mention that this analysis involves AI. Mention the haircut, ownership, and transmission factors briefly. If a seller type note is given above, weave in a brief mention that private-party sales and dealer-certified sales may differ in price. End with a note that condition-based deductions are not included and should be assessed separately. Do NOT use markdown formatting. Keep it under 130 words."""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512},
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 768, "thinkingConfig": {"thinkingBudget": 0}},
     }
 
     try:
@@ -326,9 +353,11 @@ def _fallback_explanation(rc_data, gemini_result, valuation):
     model_name = f"{gemini_result.get('registration_year', '')} {gemini_result.get('model', '')} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})"
     return (
         f"Your {model_name} with {v['meta']['km_run']:,} km is estimated at "
-        f"₹{v['final_range']['low_lakh']:.2f}L – ₹{v['final_range']['high_lakh']:.2f}L. "
-        f"Usage is {v['adjustments']['usage']['label'].lower()} and ownership is "
-        f"{v['adjustments']['ownership']['label'].lower()}. "
+        f"₹{v['final_range']['low_lakh']:.2f}L – ₹{v['final_range']['high_lakh']:.2f}L, after a "
+        f"{v['adjustments']['haircut']['haircut_pct']:.0f}% haircut on listing prices (asking price vs sale price). "
+        f"Usage is {v['adjustments']['usage']['label'].lower()}, ownership is "
+        f"{v['adjustments']['ownership']['label'].lower()}, and transmission is "
+        f"{v['adjustments']['transmission']['label'].lower()}. "
         f"Condition-based deductions are not included and should be assessed separately."
     )
 
@@ -386,10 +415,14 @@ async def valuate(req: ValuationRequest):
         fuel_type=fuel_type,
         owner_sr=rc_data.get("owner_sr", 1),
         rto_code=rc_data.get("rto_code", ""),
+        variant=gemini_result.get("variant", ""),
+        listings_count=price_research.get("listings_found_approx", 0),
+        model=gemini_result.get("model", ""),
+        generation=gemini_result.get("generation", ""),
     )
 
     # Step 6: AI-generated explanation
-    explanation = generate_explanation(rc_data, gemini_result, valuation)
+    explanation = generate_explanation(rc_data, gemini_result, valuation, price_research)
 
     # Surface blacklist/challan warnings from the RC data alongside Gemini's own flags
     flags = list(gemini_result.get("flags", []))
@@ -435,6 +468,6 @@ async def serve_index():
 @app.get("/{filename}")
 async def serve_static(filename: str):
     filepath = os.path.join(BASE_DIR, filename)
-    if os.path.isfile(filepath) and filename in ["style.css", "app_v1.js", "favicon.ico"]:
+    if os.path.isfile(filepath) and filename in ["style.css", "app_v3.js", "favicon.ico"]:
         return FileResponse(filepath)
     raise HTTPException(status_code=404)
