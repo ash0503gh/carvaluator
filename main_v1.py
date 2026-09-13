@@ -416,23 +416,15 @@ async def valuate(req: ValuationRequest):
         ex_showroom_override=ex_showroom,
     )
 
-    # Step 6: AI-generated explanation
-    explanation = generate_explanation(rc_data, gemini_result, valuation, price_research)
+    # Step 6: Explanation omitted per user request (summary section removed)
+    explanation = ""
 
-    # Surface blacklist/challan warnings from the RC data alongside Gemini's own flags
+    # Surface blacklist/commercial warnings from the RC data alongside Gemini's own flags
+    # (Traffic violations are displayed as metadata, not notices)
     flags = list(gemini_result.get("flags", []))
     if rc_data.get("blacklist_status", "").strip().lower() == "blacklisted":
         reason = rc_data.get("blacklist_reason", "")
         flags.append(f"⛔ Vehicle is BLACKLISTED{f' — {reason}' if reason else ''}. Verify carefully before proceeding.")
-    if rc_data.get("pending_challan"):
-        ch_count = rc_data.get("total_challans", 0)
-        ch_amt = rc_data.get("total_challan_amount", 0)
-        parts = []
-        if ch_count:
-            parts.append(f"{ch_count} pending challan{'s' if ch_count > 1 else ''}")
-        if ch_amt:
-            parts.append(f"totalling ₹{ch_amt:,.0f}")
-        flags.append(f"⚠️ {' '.join(parts) or 'Pending traffic challans'} on this vehicle.")
     if rc_data.get("is_commercial"):
         flags.append("ℹ️ Registered as a commercial vehicle — resale dynamics differ from private vehicles.")
 
@@ -451,12 +443,49 @@ async def valuate(req: ValuationRequest):
             "insurance_valid_till": rc_data.get("insurance_validity", ""),
             "financer": rc_data.get("financer", ""),
             "confidence": gemini_result.get("confidence", 0),
+            "total_challans": rc_data.get("total_challans", 0),
+            "total_challan_amount": rc_data.get("total_challan_amount", 0.0),
+            "provider": rc_data.get("provider", ""),
         },
         "valuation": valuation,
         "price_research": price_research,
         "explanation": explanation,
         "flags": flags,
         "disclaimer": "This is an estimated market range based on current listings. Actual value depends on physical condition, service history, and negotiation. Condition-based deductions are NOT included.",
+    }
+
+
+@app.get("/api/debug-rc/{reg_no}")
+def debug_rc(reg_no: str):
+    clean = re.sub(r"[^A-Z0-9]", "", reg_no.upper())
+    c24_url = f"https://vehicle.cars24.team/v1/2025-09/vehicle-number/{clean}"
+    c24_headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "x_basic_a": "Basic YzJiX2Zyb250ZW5kOko1SXRmQTk2bTJfY3lRVk00dEtOSnBYaFJ0c0NtY1h1",
+        "referer": "https://www.cars24.com/sell-used-cars/",
+        "origin": "https://www.cars24.com",
+        "device_category": "WebApp",
+        "origin_source": "c2b-website",
+        "platform": "seller",
+        "accept": "application/json, text/plain, */*",
+        "X-Forwarded-For": "103.211.200.1",
+        "X-Real-IP": "103.211.200.1",
+        "CF-Connecting-IP": "103.211.200.1",
+    }
+    c24_res = {}
+    try:
+        r = requests.get(c24_url, headers=c24_headers, timeout=12)
+        c24_res = {"status": r.status_code, "data": r.json() if r.status_code == 200 else r.text[:200]}
+    except Exception as e:
+        c24_res = {"error": str(e), "type": type(e).__name__}
+    
+    scrape_res = scrape_vehicle(clean)
+    return {
+        "reg_no": clean,
+        "cars24_direct": c24_res,
+        "scraper_provider": scrape_res.provider,
+        "scraper_vehicle": scrape_res.vehicle.__dict__ if scrape_res.vehicle else None,
+        "scraper_error": scrape_res.error_message,
     }
 
 

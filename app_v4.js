@@ -100,12 +100,20 @@ function render(data) {
     badge.className = "match-pill " + (conf >= 0.85 ? "match-high" : conf >= 0.6 ? "match-med" : "match-low");
 
     const metaEl = document.getElementById("vehicle-meta");
-    metaEl.innerHTML = [
+    const metaTags = [
         v.rc_number, v.fuel_type, v.body_type,
         `${v.owner_count} owner${v.owner_count > 1 ? "s" : ""}`,
         val.meta.km_run.toLocaleString("en-IN") + " km",
         val.meta.age_years.toFixed(1) + " yrs",
-    ].filter(Boolean).map(t => `<span class="tag">${t}</span>`).join("");
+    ];
+    if (v.total_challans != null) {
+        if (v.total_challans > 0) {
+            metaTags.push(`${v.total_challans} Total Challan${v.total_challans > 1 ? "s" : ""} (₹${Math.round(v.total_challan_amount || 0).toLocaleString("en-IN")})`);
+        } else {
+            metaTags.push("0 Challans");
+        }
+    }
+    metaEl.innerHTML = metaTags.filter(Boolean).map(t => `<span class="tag">${t}</span>`).join("");
 
     // Price
     const low = val.final_range.low_lakh;
@@ -211,12 +219,10 @@ function render(data) {
         flagsList.innerHTML = flags.map(f => `<div class="flag-item">${f}</div>`).join("");
     } else flagsCard.style.display = "none";
 
-    // Explanation
-    document.getElementById("explanation").textContent = data.explanation || "";
+    // Disclaimer
+    const expEl = document.getElementById("explanation");
+    if (expEl) expEl.textContent = data.explanation || "";
     document.getElementById("disclaimer").textContent = data.disclaimer || "";
-
-    const title = document.getElementById("vehicle-title").textContent;
-    summaryText = `${title} — estimated ${fmt(low)} to ${fmt(high)} (median ${fmt(med)}).\n\n${data.explanation || ""}`;
 
     document.getElementById("results").style.display = "block";
     document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });

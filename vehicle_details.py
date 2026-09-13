@@ -167,26 +167,35 @@ def determine_variant(make: str, model: str, rc_model: str, ds_details: list) ->
             rem = re.sub(re.escape(word), "", rem, flags=re.IGNORECASE)
     return rem.strip() or "Standard / Base"
 
-def fetch_cars24_details(reg_no: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
+def fetch_cars24_details(reg_no: str, timeout: float = 12.0) -> Optional[Dict[str, Any]]:
     """Queries Cars24's valuation supply microservice."""
     url = f"https://vehicle.cars24.team/v1/2025-09/vehicle-number/{reg_no}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "x_basic_a": "Basic YzJiX2Zyb250ZW5kOko1SXRmQTk2bTJfY3lRVk00dEtOSnBYaFJ0c0NtY1h1",
-        "referer": "https://www.cars24.com/",
+        "referer": "https://www.cars24.com/sell-used-cars/",
+        "origin": "https://www.cars24.com",
         "device_category": "WebApp",
         "origin_source": "c2b-website",
         "platform": "seller",
         "accept": "application/json, text/plain, */*",
+        "X-Forwarded-For": "103.211.200.1",
+        "X-Real-IP": "103.211.200.1",
+        "CF-Connecting-IP": "103.211.200.1",
     }
     try:
         resp = requests.get(url, headers=headers, timeout=timeout)
+        print(f"[CARS24] {reg_no} HTTP {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
             if data.get("success"):
                 return data.get("detail", {})
-    except Exception:
-        pass
+            else:
+                print(f"[CARS24] success=false: {data}")
+        else:
+            print(f"[CARS24] HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[CARS24] Exception for {reg_no}: {type(e).__name__}: {e}")
     return None
 
 def fetch_spinny_details(reg_no: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
