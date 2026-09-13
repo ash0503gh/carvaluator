@@ -158,17 +158,24 @@ def get_city_tier(rto_code: str) -> str:
 
 # ─── Transmission Premium ───────────────────────────────────────────
 
-def calc_transmission_adjustment(variant: str) -> dict:
+def calc_transmission_adjustment(variant: str, transmission_type: str = "") -> dict:
     """
-    Automatic variants (AT/AMT/CVT/DCT) command a resale premium over manual.
+    Automatic variants (AT/AMT/CVT/DCT/Strong Hybrid) command a resale premium over manual.
     Flat, deterministic percentage — not researched per-query, so the same
     car always gets the same adjustment regardless of what Gemini's search
     happens to return that day.
     """
     variant_upper = (variant or "").upper()
-    auto_markers = ("AMT", "AT", "CVT", "DCT", "AUTOMATIC")
+    trans_upper = (transmission_type or "").upper()
+    auto_markers = ("AMT", "AT", "CVT", "DCT", "AUTOMATIC", "AGS")
     tokens = variant_upper.replace("+", " ").split()
-    is_automatic = any(marker in tokens for marker in auto_markers) or "AUTOMATIC" in variant_upper
+    is_automatic = (
+        "AUTOMATIC" in trans_upper
+        or "STRONG HYBRID" in variant_upper
+        or "E-CVT" in variant_upper
+        or any(marker in tokens for marker in auto_markers)
+        or "AUTOMATIC" in variant_upper
+    )
 
     if is_automatic:
         return {"multiplier": 1.06, "label": "Automatic transmission (+6%)", "is_automatic": True}
@@ -308,6 +315,7 @@ def compute_valuation(
     listings_count = None,
     model: str = "",
     generation: str = "",
+    transmission_type: str = "",
 ) -> dict:
     """
     Apply all deterministic adjustments on top of AI-researched market prices.
@@ -332,7 +340,7 @@ def compute_valuation(
     # Step 3: car-specific multipliers
     usage = calc_usage_adjustment(km_run, age_years, fuel_type)
     ownership = calc_ownership_multiplier(owner_sr)
-    transmission = calc_transmission_adjustment(variant)
+    transmission = calc_transmission_adjustment(variant, transmission_type)
     regulatory = check_regulatory(fuel_type, age_years, rto_code)
     city_tier = get_city_tier(rto_code)
 

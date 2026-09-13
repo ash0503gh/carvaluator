@@ -395,6 +395,7 @@ async def valuate(req: ValuationRequest):
         listings_count=price_research.get("listings_found_approx", 0),
         model=gemini_result.get("model", ""),
         generation=gemini_result.get("generation", ""),
+        transmission_type=rc_data.get("transmission", ""),
     )
 
     # Step 6: AI-generated explanation
