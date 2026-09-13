@@ -38,43 +38,84 @@ def calc_age_years(reg_date_str: str) -> float:
             continue
     return 0.0
 
+def interpolate_abs_km_wear(km_run: int) -> float:
+    """
+    Interpolate absolute odometer wear and market psychology factor.
+    Reflects physical component wear (tires, suspension, clutch, fluids)
+    and psychological milestone resistance (especially crossing 1 Lakh km in India).
+    """
+    knots = [
+        (0, 0.04),       # Mint showroom condition (+4%)
+        (20000, 0.02),   # Very light usage (+2%)
+        (40000, 0.00),   # Baseline standard wear (0%)
+        (60000, -0.04),  # 50k milestone: tires, brake pads, major service (−4%)
+        (80000, -0.08),  # Suspension bushings, struts, battery wear (−8%)
+        (100000, -0.13), # 1 Lakh km barrier: severe psychological drop (−13%)
+        (130000, -0.18), # High mileage (−18%)
+        (160000, -0.24), # Very high mileage (−24%)
+        (200000, -0.28), # Maximum physical wear penalty (−28%)
+    ]
+    if km_run <= knots[0][0]:
+        return knots[0][1]
+    if km_run >= knots[-1][0]:
+        return knots[-1][1]
+    for i in range(len(knots) - 1):
+        k0, v0 = knots[i]
+        k1, v1 = knots[i + 1]
+        if k0 <= km_run <= k1:
+            t = (km_run - k0) / (k1 - k0)
+            return v0 + t * (v1 - v0)
+    return 0.0
+
+
 def calc_usage_adjustment(km_run: int, age_years: float, fuel_type: str) -> dict:
     """
-    Returns a multiplier based on how the car's KM compares to expected usage.
-    Over-driven cars get a deduction; under-driven get a small premium.
+    Dynamic dual-layer usage model:
+    Layer 1: Annual pace adjustment (continuous deviation from expected annual KM for vehicle age).
+    Layer 2: Absolute odometer wear & psychological milestone knots (continuous interpolation).
     """
     if age_years < 0.25:
-        return {"multiplier": 1.0, "ratio": 1.0, "label": "Too new to assess usage"}
+        return {
+            "multiplier": 1.0,
+            "ratio": 1.0,
+            "expected_km": 0,
+            "label": "Too new to assess usage",
+        }
 
     expected_km_yr = EXPECTED_KM_PER_YEAR.get(fuel_type, 12000)
     expected_km = expected_km_yr * age_years
+    delta_km = km_run - expected_km
     ratio = km_run / expected_km if expected_km > 0 else 1.0
 
-    if ratio > 1.5:
-        multiplier = 0.88  # heavily over-driven
-        label = "Heavily over-driven"
-    elif ratio > 1.2:
-        # -1% per 10% over expected, starting from 1.2
-        over_pct = (ratio - 1.0) * 100
-        deduction = min(over_pct * 0.1, 12)  # cap at 12%
-        multiplier = 1.0 - (deduction / 100)
-        label = "Over-driven"
-    elif ratio < 0.5:
-        multiplier = 1.05  # very low usage premium, capped
-        label = "Very low usage"
-    elif ratio < 0.8:
-        under_pct = (1.0 - ratio) * 100
-        premium = min(under_pct * 0.08, 5)  # cap at 5%
-        multiplier = 1.0 + (premium / 100)
-        label = "Below-average usage"
+    # 1. Pace adjustment: annual pace vs expected benchmark
+    if delta_km > 0:
+        # Over-driven pace: -2.0% per 10,000 km excess
+        pace_adj = -(delta_km / 10000.0) * 0.02
     else:
-        multiplier = 1.0
-        label = "Normal usage"
+        # Under-driven pace: +1.2% per 10,000 km deficit, capped at +3.5%
+        pace_adj = min((-delta_km / 10000.0) * 0.012, 0.035)
+
+    # 2. Absolute odometer wear
+    abs_adj = interpolate_abs_km_wear(km_run)
+
+    # Combined multiplier, bounded between 0.68 (-32%) and 1.08 (+8%)
+    combined = 1.0 + pace_adj + abs_adj
+    combined = max(0.68, min(1.08, combined))
+
+    pct = round((combined - 1.0) * 100, 1)
+    if pct > 0:
+        label = f"Low mileage (+{pct}%)"
+    elif pct < 0:
+        label = f"Mileage & wear ({pct}%)"
+    else:
+        label = "Average usage"
 
     return {
-        "multiplier": round(multiplier, 4),
+        "multiplier": round(combined, 4),
         "ratio": round(ratio, 2),
         "expected_km": round(expected_km),
+        "pace_adj": round(pace_adj, 4),
+        "abs_adj": round(abs_adj, 4),
         "label": label,
     }
 

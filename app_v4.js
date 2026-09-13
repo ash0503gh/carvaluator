@@ -224,9 +224,9 @@ function render(data) {
           val: cap(adj.confidence.confidence),
           note: adj.confidence.label },
 
-        { icon: I.gauge, cls: adj.usage.multiplier >= 1 ? "pos" : "neg",
+        { icon: I.gauge, cls: adj.usage.multiplier > 1.0 ? "pos" : adj.usage.multiplier < 1.0 ? "neg" : "",
           name: "Usage",
-          val: `×${adj.usage.multiplier.toFixed(3)}`,
+          val: adj.usage.multiplier === 1.0 ? "Base" : `×${adj.usage.multiplier.toFixed(2)}`,
           note: `${adj.usage.label} · ${val.meta.km_run.toLocaleString("en-IN")} vs ${(adj.usage.expected_km||0).toLocaleString("en-IN")} expected` },
 
         { icon: I.user, cls: adj.ownership.multiplier >= 1 ? "" : "neg",
