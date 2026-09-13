@@ -158,12 +158,12 @@ def get_city_tier(rto_code: str) -> str:
 
 # ─── Transmission Premium ───────────────────────────────────────────
 
-def calc_transmission_adjustment(variant: str, transmission_type: str = "") -> dict:
+def calc_transmission_adjustment(variant: str, transmission_type: str = "", searched_variant_specifically: bool = False) -> dict:
     """
     Automatic variants (AT/AMT/CVT/DCT/Strong Hybrid) command a resale premium over manual.
-    Flat, deterministic percentage — not researched per-query, so the same
-    car always gets the same adjustment regardless of what Gemini's search
-    happens to return that day.
+    If the market search was already specifically conducted for an automatic/hybrid trim
+    (e.g., 'Strong Hybrid Alpha+', 'AT', 'CVT'), the market price ALREADY accounts for the
+    transmission. We only add +6% when comparing against general or base model listings.
     """
     variant_upper = (variant or "").upper()
     trans_upper = (transmission_type or "").upper()
@@ -178,19 +178,23 @@ def calc_transmission_adjustment(variant: str, transmission_type: str = "") -> d
     )
 
     if is_automatic:
+        if searched_variant_specifically:
+            # The search already queried and priced this specific automatic variant.
+            # Avoid duplicate markup.
+            return {"multiplier": 1.00, "label": "Automatic (variant-priced)", "is_automatic": True}
         return {"multiplier": 1.06, "label": "Automatic transmission (+6%)", "is_automatic": True}
     return {"multiplier": 1.00, "label": "Manual transmission", "is_automatic": False}
 
 
 # ─── Asking-Price Haircut ────────────────────────────────────────────
 
-ASKING_PRICE_HAIRCUT = 0.06  # Indian listings are typically asking prices, not transaction prices
+ASKING_PRICE_HAIRCUT = 0.10  # Indian listings are asking prices; actual transactions reflect ~10% negotiation & dealer markup
 
 def apply_asking_price_haircut(low: float, high: float, median: float) -> dict:
     """
     Online listings are sellers' asking prices, not what cars actually sell
     for — Indian used-car negotiation norms mean the real transaction price
-    is typically a bit below the listed price. Applied uniformly before any
+    is typically 8-12% below the listed price. Applied uniformly before any
     other adjustment.
     """
     factor = 1 - ASKING_PRICE_HAIRCUT
@@ -317,6 +321,7 @@ def compute_valuation(
     generation: str = "",
     transmission_type: str = "",
     ex_showroom_override: float = 0.0,
+    searched_variant_specifically: bool = False,
 ) -> dict:
     """
     Apply all deterministic adjustments on top of AI-researched market prices.
@@ -341,7 +346,9 @@ def compute_valuation(
     # Step 3: car-specific multipliers
     usage = calc_usage_adjustment(km_run, age_years, fuel_type)
     ownership = calc_ownership_multiplier(owner_sr)
-    transmission = calc_transmission_adjustment(variant, transmission_type)
+    transmission = calc_transmission_adjustment(
+        variant, transmission_type, searched_variant_specifically=searched_variant_specifically
+    )
     regulatory = check_regulatory(fuel_type, age_years, rto_code)
     city_tier = get_city_tier(rto_code)
 

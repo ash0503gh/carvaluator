@@ -234,9 +234,9 @@ function render(data) {
           val: `×${adj.ownership.multiplier.toFixed(2)}`,
           note: adj.ownership.label },
 
-        { icon: I.gear, cls: adj.transmission.is_automatic ? "pos" : "",
+        { icon: I.gear, cls: adj.transmission.multiplier > 1.0 ? "pos" : "",
           name: "Transmission",
-          val: `×${adj.transmission.multiplier.toFixed(2)}`,
+          val: adj.transmission.multiplier > 1.0 ? `×${adj.transmission.multiplier.toFixed(2)}` : "Base",
           note: adj.transmission.label },
 
         { icon: I.shield, cls: adj.regulatory.multiplier < 0.9 ? "crit" : adj.regulatory.multiplier < 1 ? "neg" : "",

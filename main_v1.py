@@ -410,6 +410,7 @@ async def valuate(req: ValuationRequest):
         generation=gemini_result.get("generation", ""),
         transmission_type=rc_data.get("transmission", ""),
         ex_showroom_override=ex_showroom,
+        searched_variant_specifically=bool(price_research.get("searched_variant_specifically", False)),
     )
 
     # Step 6: Explanation omitted per user request (summary section removed)
