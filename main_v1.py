@@ -69,9 +69,13 @@ def decode_rc(rc_number: str) -> dict:
     if not rto_code:
         rto_code = re.sub(r"[^A-Z0-9]", "", rc_number.upper())[:4]
 
+    reg_date = (v.additional_attributes.get("registration_date") if v.additional_attributes else None) or ""
+    if not reg_date and v.manufacture_year:
+        reg_date = f"{v.manufacture_year}-01-01"
+
     return {
         "rc_number": v.registration_number,
-        "reg_date": "",  # Cars24 returns registeredAt but scraper doesn't expose raw date
+        "reg_date": reg_date,
         "owner_name": v.owner_name_masked or "",
         "fuel_type": (v.fuel_type or "Petrol").title(),
         "vehicle_manufacturer": v.make_and_model.split()[0] if v.make_and_model else "",
@@ -336,8 +340,18 @@ async def valuate(req: ValuationRequest):
     if req.km_run < 0 or req.km_run > 999999:
         raise HTTPException(status_code=400, detail="KM run must be between 0 and 999,999")
 
-    # Step 1: Decode RC via RapidAPI
+    # Step 1: Decode RC via scraper
     rc_data = decode_rc(rc_number)
+
+    # Check manufacturer
+    make = (rc_data.get("vehicle_manufacturer") or "").strip().lower()
+    model_str = (rc_data.get("vehicle_model") or "").strip().lower()
+    is_maruti = any(k in make or k in model_str for k in ["maruti", "suzuki"])
+    if not is_maruti:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CarValuator currently supports Maruti Suzuki vehicles only. Detected vehicle: {rc_data.get('vehicle_model') or make.title()}."
+        )
 
     # Step 2: Gemini AI — normalize model + research market prices
     gemini_result = call_gemini(rc_data, req.km_run)

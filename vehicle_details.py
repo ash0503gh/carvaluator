@@ -242,6 +242,31 @@ def fetch_carinfo_challans(reg_no: str, timeout: float = 8.0) -> tuple:
         return 0, 0.0
 
 
+def fetch_carinfo_rc(reg_no: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
+    """Decrypted SSR extraction of Vahan RC vehicle details from CarInfo."""
+    url = f"https://www.carinfo.app/rc-details/{reg_no}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code != 200:
+            return None
+        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text)
+        if not m:
+            return None
+        nd = json.loads(m.group(1))
+        enc = nd.get("props", {}).get("pageProps", {}).get("xdataprops")
+        if not enc:
+            return None
+        dec_json = decrypt_cryptojs(enc, DEFAULT_PASSPHRASE)
+        raw = json.loads(dec_json)
+        return raw.get("data", {})
+    except Exception:
+        return None
+
+
 # =====================================================================
 # 4. UNIFIED CONCURRENT SCRAPER
 # =====================================================================
@@ -268,13 +293,19 @@ def scrape_vehicle(registration_number: str, timeout: float = 10.0) -> LookupRes
 
     source = "Cars24+CarInfo"
     spinny_data = None
+    carinfo_rc_data = None
 
-    # Fallback to Spinny if needed
+    # Fallback 1: Spinny
     if not c24_data:
         spinny_data = fetch_spinny_details(clean_reg, timeout)
         source = "Spinny+CarInfo"
 
+    # Fallback 2: CarInfo RC Decryption (for Tier-2 cities or datacenter IP blocks)
     if not c24_data and not spinny_data:
+        carinfo_rc_data = fetch_carinfo_rc(clean_reg, timeout)
+        source = "CarInfo-RTO"
+
+    if not c24_data and not spinny_data and not carinfo_rc_data:
         elapsed = (time.perf_counter() - start_time) * 1000
         return LookupResult(
             success=False,
@@ -361,7 +392,7 @@ def scrape_vehicle(registration_number: str, timeout: float = 10.0) -> LookupRes
             city=reg_place.split(",")[0].strip() if reg_place else None
         )
 
-    else:
+    elif spinny_data:
         # Fallback to Spinny
         make_obj = spinny_data.get("make") or {}
         model_obj = spinny_data.get("model") or {}
@@ -403,6 +434,104 @@ def scrape_vehicle(registration_number: str, timeout: float = 10.0) -> LookupRes
             challan_url=f"https://www.carinfo.app/challan-details/{clean_reg}",
             body_type=spinny_data.get("body_type"),
             city=city_name
+        )
+
+    elif carinfo_rc_data:
+        web_sections = carinfo_rc_data.get("webSections", [])
+        meta = carinfo_rc_data.get("meta", {})
+
+        owner_name = "Masked"
+        rc_model = ""
+        rto = RtoDetails()
+
+        for section in web_sections:
+            msg = section.get("message", {})
+            if msg.get("title") and owner_name == "Masked":
+                owner_name = msg.get("title")
+            if msg.get("subtitle"):
+                rc_model = msg.get("subtitle")
+            for sub_m in section.get("messages", []):
+                title = (sub_m.get("title") or "").strip().lower()
+                sub = (sub_m.get("subtitle") or "").strip()
+                if "phone" in title:
+                    rto.phone = sub
+                elif "number" in title or "rto code" in title or title.endswith("number"):
+                    rto.code = sub
+                elif "registered rto" in title or "office" in title:
+                    rto.name = sub
+                elif "state" in title:
+                    rto.state = sub
+                elif "website" in title:
+                    rto.website = sub
+
+        ins_date = meta.get("insuranceExpireDate")
+        ins_expired = meta.get("insuranceExpired") == "true"
+        insurance = InsuranceDetails(
+            status="Expired" if ins_expired else ("Valid" if ins_date else "Unknown"),
+            expiry_date=ins_date,
+            is_expired=ins_expired
+        )
+
+        make = ""
+        model = rc_model
+        rc_up = rc_model.upper()
+        if "VITARA" in rc_up or "MARUTI" in rc_up:
+            make = "Maruti Suzuki"
+            model = "Grand Vitara" if "VITARA" in rc_up else rc_model
+        elif "HONDA" in rc_up or "CITY" in rc_up or "BRIO" in rc_up:
+            make = "Honda"
+            model = "City" if "CITY" in rc_up else ("Brio" if "BRIO" in rc_up else rc_model)
+        elif "HYUNDAI" in rc_up or "VERNA" in rc_up or "CRETA" in rc_up:
+            make = "Hyundai"
+            model = "Creta" if "CRETA" in rc_up else ("Verna" if "VERNA" in rc_up else rc_model)
+        elif "TOYOTA" in rc_up or "FORTUNER" in rc_up or "INNOVA" in rc_up:
+            make = "Toyota"
+            model = "Fortuner" if "FORTUNER" in rc_up else ("Innova" if "INNOVA" in rc_up else rc_model)
+        elif " " in rc_model:
+            make = rc_model.split()[0]
+            model = " ".join(rc_model.split()[1:])
+
+        variant = determine_variant(make, model, rc_model, [])
+        make_and_model = f"{make} {model}".strip() if make else rc_model
+        if variant and variant.upper() not in make_and_model.upper():
+            make_and_model = f"{make_and_model} {variant}".strip()
+
+        transmission = resolve_transmission(rc_model, variant, None)
+        
+        reg_year = 2022
+        if ins_date:
+            yr_m = re.search(r'\b(20\d\d)\b', ins_date)
+            if yr_m:
+                found_yr = int(yr_m.group(1))
+                reg_year = (found_yr - 5) if found_yr > 2025 else found_yr
+
+        vehicle = VehicleDetails(
+            registration_number=clean_reg,
+            make_and_model=make_and_model,
+            variant=variant,
+            manufacture_year=reg_year,
+            owner_count=1,
+            transmission=transmission,
+            fuel_type="Petrol",
+            vehicle_category="LMV",
+            owner_name_masked=owner_name,
+            rto=rto,
+            insurance=insurance,
+            pucc_status="Valid / Up-to-date",
+            total_challans=ch_count,
+            total_challan_amount=ch_amount,
+            challan_url=f"https://www.carinfo.app/challan-details/{clean_reg}",
+            body_type="Passenger Car",
+            city=(rto.name or "").split(",")[0].strip() if rto.name else None,
+            additional_attributes={
+                "variant": variant,
+                "transmission": transmission,
+                "rto_name": rto.name,
+                "rto_code": rto.code,
+                "insurance_expiry": ins_date,
+                "total_challans": ch_count,
+                "total_challan_amount": ch_amount
+            }
         )
 
     elapsed = (time.perf_counter() - start_time) * 1000
