@@ -39,33 +39,37 @@ class ValuationRequest(BaseModel):
 
 def decode_rc(rc_number: str) -> dict:
     """
-    Call RapidAPI "RTO Vehicle Information India" (eccentriclabs) to get vehicle details.
-    Synchronous single-call API — no task/poll flow.
-    Subscribe (free tier): https://rapidapi.com/streamifyworld/api/rto-vehicle-information-india
+    Call RapidAPI "Vehicle RC Verification" (zapfintek) to get vehicle details.
+    Synchronous single-call API. Free tier: 500,000 requests/month.
+    Subscribe: https://rapidapi.com/zapfintek/api/vehicle-rc-verification1
+
+    NOTE: This provider requires a static 'Accesstoken' header in addition to
+    your normal RapidAPI key — this value is fixed by the provider (not tied
+    to your account) and was captured from their published code sample.
+    Response field names weren't visible in the provider's docs at integration
+    time, so this function checks several common variants per field and
+    raises a diagnostic error showing the raw response if none match —
+    check that error message and adjust the field lookups below if needed.
     """
     if not RAPIDAPI_KEY:
         raise HTTPException(status_code=500, detail="RAPIDAPI_KEY not configured")
 
-    url = "https://rto-vehicle-information-india.p.rapidapi.com/getVehicleInfo"
+    url = "https://vehicle-rc-verification1.p.rapidapi.com/api/rc_validation"
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "rto-vehicle-information-india.p.rapidapi.com",
-        "Content-Type": "application/json",
+        "x-rapidapi-host": "vehicle-rc-verification1.p.rapidapi.com",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accesstoken": "128c74c863692303f82245f66e66f6842f6",
     }
-    payload = {
-        "vehicle_no": rc_number.upper().replace(" ", ""),
-        "consent": "Y",
-        "consent_text": "I hereby give my consent for Eccentric Labs API to fetch my information",
-    }
+    payload = {"rc_number": rc_number.upper().replace(" ", "")}
 
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=20)
+        resp = requests.post(url, headers=headers, data=payload, timeout=20)
 
-        # Surface auth/config errors distinctly from "vehicle not found"
         if resp.status_code == 401 or resp.status_code == 403:
             raise HTTPException(
                 status_code=502,
-                detail=f"RapidAPI authentication failed (HTTP {resp.status_code}). Check that RAPIDAPI_KEY is set correctly in Render's environment variables. Response: {resp.text[:300]}",
+                detail=f"RapidAPI authentication failed (HTTP {resp.status_code}). Check RAPIDAPI_KEY in Render's environment variables. Response: {resp.text[:300]}",
             )
         if resp.status_code == 429:
             raise HTTPException(
@@ -73,45 +77,73 @@ def decode_rc(rc_number: str) -> dict:
                 detail="RapidAPI rate limit or monthly quota exceeded. Check your plan usage on RapidAPI dashboard.",
             )
 
-        data = resp.json()
-
-        if resp.status_code != 200 or not data.get("status") or not data.get("data"):
+        try:
+            data = resp.json()
+        except ValueError:
             raise HTTPException(
-                status_code=404,
-                detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(data)[:300]}",
+                status_code=502,
+                detail=f"RC API returned non-JSON response (status {resp.status_code}): {resp.text[:300]}",
             )
 
-        result = data["data"]
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not find vehicle data for {rc_number}. API response (status {resp.status_code}): {json.dumps(data)[:400]}",
+            )
 
-        # maker_model looks like "HONDA CARS INDIA LTD / CIVIC 1.6 ZX MT (I-DTEC)"
-        maker_model = result.get("maker_model", "") or ""
-        if "/" in maker_model:
+        # Provider's exact response envelope wasn't visible at integration time —
+        # unwrap common wrapper patterns (data/result/response) if present.
+        result = data
+        for wrapper_key in ("data", "result", "response"):
+            if isinstance(data.get(wrapper_key), dict):
+                result = data[wrapper_key]
+                break
+
+        def first_present(*keys, default=""):
+            for k in keys:
+                if result.get(k) not in (None, ""):
+                    return result.get(k)
+            return default
+
+        maker_model = first_present("maker_model", "vehicle_model", "model", "vehicleModel")
+        manufacturer_raw = first_present("manufacturer", "maker", "vehicle_manufacturer")
+
+        if not maker_model and not manufacturer_raw:
+            # Nothing recognizable came back — surface the raw shape for debugging
+            raise HTTPException(
+                status_code=502,
+                detail=f"RC API response didn't match expected fields. Raw response: {json.dumps(data)[:500]}",
+            )
+
+        if manufacturer_raw:
+            manufacturer, model_str = manufacturer_raw, maker_model
+        elif "/" in maker_model:
             manufacturer, model_str = maker_model.split("/", 1)
         else:
             manufacturer, model_str = maker_model, ""
 
-        owner_sr_raw = result.get("ownership", "1")
+        owner_sr_raw = first_present("ownership", "owner_sr", "owner_serial_number", "ownership_number", default="1")
         try:
-            owner_sr = int(owner_sr_raw)
-        except (ValueError, TypeError):
+            owner_sr = int(str(owner_sr_raw).strip() or "1")
+        except ValueError:
             owner_sr = 1
 
         return {
-            "rc_number": result.get("registration_no", rc_number),
-            "reg_date": result.get("registration_date", ""),
-            "owner_name": result.get("owner_name", ""),
-            "fuel_type": (result.get("fuel_type", "") or "").title(),
-            "vehicle_manufacturer": manufacturer.strip(),
-            "vehicle_model": model_str.strip(),
+            "rc_number": first_present("registration_no", "rc_number", "registration_number", default=rc_number),
+            "reg_date": first_present("registration_date", "reg_date", "regDate"),
+            "owner_name": first_present("owner_name", "ownerName"),
+            "fuel_type": str(first_present("fuel_type", "fuelType")).title(),
+            "vehicle_manufacturer": str(manufacturer).strip(),
+            "vehicle_model": str(model_str).strip(),
             "owner_sr": owner_sr,
             "rto_code": rc_number[:4].upper(),
-            "vehicle_class": result.get("vehicle_class", ""),
-            "insurance_validity": result.get("insurance_upto", ""),
-            "fitness_upto": result.get("fitness_upto", ""),
-            "financer": result.get("financier_name", "") or "",
-            "color": result.get("vehicle_color", ""),
-            "rc_status": result.get("rc_status", ""),
-            "body_type": result.get("body_type_desc", ""),
+            "vehicle_class": first_present("vehicle_class", "vehicleClass", "vh_class_desc"),
+            "insurance_validity": first_present("insurance_upto", "insurance_validity", "insuranceUpto"),
+            "fitness_upto": first_present("fitness_upto", "fitnessUpto"),
+            "financer": first_present("financier_name", "financer", "financerName"),
+            "color": first_present("vehicle_color", "color", "vehicleColor"),
+            "rc_status": first_present("rc_status", "status", "rcStatus"),
+            "body_type": first_present("body_type_desc", "body_type", "bodyType"),
         }
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"RC API call failed: {str(e)}")
