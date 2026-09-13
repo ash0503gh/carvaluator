@@ -37,6 +37,28 @@ class ValuationRequest(BaseModel):
 
 # ─── RC Decode (RapidAPI - Vehicle RC Information) ──────────────────
 
+def _post_preserving_method(url, headers, data, timeout, max_redirects=5):
+    """
+    requests.post() follows 301/302 redirects the same way browsers do:
+    by silently converting the method to GET. Some API proxies (RapidAPI's
+    among them) redirect from the edge host to the actual backend host, and
+    if that redirect is a 301/302, our POST becomes a GET and the backend
+    correctly rejects it. This preserves POST through 301/302/307/308 —
+    only a 303 (which explicitly means "re-fetch with GET") converts.
+    """
+    current_url = url
+    for _ in range(max_redirects):
+        resp = requests.post(current_url, headers=headers, data=data, timeout=timeout, allow_redirects=False)
+        if resp.status_code in (301, 302, 307, 308):
+            location = resp.headers.get("Location")
+            if not location:
+                return resp
+            current_url = requests.compat.urljoin(current_url, location)
+            continue
+        return resp
+    return resp  # exhausted redirects, return last response as-is
+
+
 def decode_rc(rc_number: str) -> dict:
     """
     Call RapidAPI "Vehicle RC Verification" (zapfintek) to get vehicle details.
@@ -64,7 +86,7 @@ def decode_rc(rc_number: str) -> dict:
     payload = {"rc_number": rc_number.upper().replace(" ", "")}
 
     try:
-        resp = requests.post(url, headers=headers, data=payload, timeout=20)
+        resp = _post_preserving_method(url, headers, payload, timeout=20)
 
         if resp.status_code == 401 or resp.status_code == 403:
             raise HTTPException(
