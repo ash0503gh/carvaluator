@@ -465,7 +465,6 @@ def debug_rc(reg_no: str):
     clean = re.sub(r"[^A-Z0-9]", "", reg_no.upper())
     c24_url = f"https://vehicle.cars24.team/v1/2025-09/vehicle-number/{clean}"
     c24_headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "x_basic_a": "Basic YzJiX2Zyb250ZW5kOko1SXRmQTk2bTJfY3lRVk00dEtOSnBYaFJ0c0NtY1h1",
         "referer": "https://www.cars24.com/sell-used-cars/",
         "origin": "https://www.cars24.com",
@@ -473,21 +472,32 @@ def debug_rc(reg_no: str):
         "origin_source": "c2b-website",
         "platform": "seller",
         "accept": "application/json, text/plain, */*",
-        "X-Forwarded-For": "103.211.200.1",
-        "X-Real-IP": "103.211.200.1",
-        "CF-Connecting-IP": "103.211.200.1",
     }
-    c24_res = {}
+    
+    from vehicle_details import cffi_requests
+    cffi_res = {}
+    if cffi_requests:
+        try:
+            r = cffi_requests.get(c24_url, headers=c24_headers, impersonate="chrome124", timeout=12)
+            cffi_res = {"status": r.status_code, "data": r.json() if r.status_code == 200 else r.text[:200]}
+        except Exception as e:
+            cffi_res = {"error": str(e), "type": type(e).__name__}
+    else:
+        cffi_res = {"status": "cffi_requests is None"}
+
+    std_res = {}
     try:
         r = requests.get(c24_url, headers=c24_headers, timeout=12)
-        c24_res = {"status": r.status_code, "data": r.json() if r.status_code == 200 else r.text[:200]}
+        std_res = {"status": r.status_code, "data": r.json() if r.status_code == 200 else r.text[:200]}
     except Exception as e:
-        c24_res = {"error": str(e), "type": type(e).__name__}
+        std_res = {"error": str(e), "type": type(e).__name__}
     
     scrape_res = scrape_vehicle(clean)
     return {
         "reg_no": clean,
-        "cars24_direct": c24_res,
+        "cffi_available": cffi_requests is not None,
+        "cffi_res": cffi_res,
+        "std_requests_res": std_res,
         "scraper_provider": scrape_res.provider,
         "scraper_vehicle": scrape_res.vehicle.__dict__ if scrape_res.vehicle else None,
         "scraper_error": scrape_res.error_message,
