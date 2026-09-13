@@ -155,6 +155,14 @@ def get_city_tier(rto_code: str) -> str:
                 return tier
     return "tier3"
 
+def calc_city_tier_adjustment(city_tier: str) -> dict:
+    """Tier 2/3 regional markets typically trade at a 3-5% discount compared to metro Tier 1 dealer hubs."""
+    if city_tier == "tier1":
+        return {"multiplier": 1.00, "label": "Tier-1 Metro market"}
+    elif city_tier == "tier2":
+        return {"multiplier": 0.97, "label": "Tier-2 regional market (−3%)"}
+    return {"multiplier": 0.95, "label": "Tier-3 / Non-metro market (−5%)"}
+
 
 # ─── Transmission Premium ───────────────────────────────────────────
 
@@ -351,12 +359,14 @@ def compute_valuation(
     )
     regulatory = check_regulatory(fuel_type, age_years, rto_code)
     city_tier = get_city_tier(rto_code)
+    location = calc_city_tier_adjustment(city_tier)
 
     combined_multiplier = (
         usage["multiplier"]
         * ownership["multiplier"]
         * transmission["multiplier"]
         * regulatory["multiplier"]
+        * location["multiplier"]
     )
 
     adjusted_low = round(banded["low_lakh"] * combined_multiplier, 2)
@@ -389,6 +399,7 @@ def compute_valuation(
             "ownership": ownership,
             "transmission": transmission,
             "regulatory": regulatory,
+            "location": location,
             "combined_multiplier": round(combined_multiplier, 4),
         },
         "cross_check": cross_check,

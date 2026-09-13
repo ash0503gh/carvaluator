@@ -243,6 +243,11 @@ function render(data) {
           name: "Regulatory",
           val: adj.regulatory.flag ? `×${adj.regulatory.multiplier.toFixed(2)}` : "Clear",
           note: adj.regulatory.message || (adj.regulatory.is_ncr ? "NCR registered, within limits" : "No regional restriction") },
+
+        { icon: I.target, cls: adj.location && adj.location.multiplier < 1.0 ? "neg" : "",
+          name: "Location",
+          val: adj.location && adj.location.multiplier < 1.0 ? `×${adj.location.multiplier.toFixed(2)}` : "Base",
+          note: adj.location ? adj.location.label : "Regional market" },
     ];
 
     grid.innerHTML = rows.map(r => `
