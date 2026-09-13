@@ -55,11 +55,14 @@ async function submitValuation() {
         loadMsg.textContent = STAGES[si];
     }, 2500);
 
+    const ownerInput = document.getElementById("owner-count");
+    const ownerVal = ownerInput && ownerInput.value ? parseInt(ownerInput.value, 10) : null;
+
     try {
         const resp = await fetch("/api/valuate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rc_number: rc, km_run: km }),
+            body: JSON.stringify({ rc_number: rc, km_run: km, owner_count: ownerVal }),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || "Something went wrong.");

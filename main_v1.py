@@ -27,11 +27,14 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 CATALOG = load_catalog()
 
 
+from typing import Optional
+
 # ─── Request / Response Models ──────────────────────────────────────
 
 class ValuationRequest(BaseModel):
     rc_number: str
     km_run: int
+    owner_count: Optional[int] = None
 
 
 # ─── Vehicle Data Extraction ──────────────────────────────────────────
@@ -399,6 +402,8 @@ async def valuate(req: ValuationRequest):
     except (ValueError, TypeError):
         ex_showroom = 0.0
 
+    owner_sr = req.owner_count if (req.owner_count and req.owner_count > 0) else rc_data.get("owner_sr", 1)
+
     valuation = compute_valuation(
         market_low=market_low,
         market_high=market_high,
@@ -406,7 +411,7 @@ async def valuate(req: ValuationRequest):
         km_run=req.km_run,
         age_years=age_years,
         fuel_type=fuel_type,
-        owner_sr=rc_data.get("owner_sr", 1),
+        owner_sr=owner_sr,
         rto_code=rc_data.get("rto_code", ""),
         variant=gemini_result.get("variant", ""),
         listings_count=price_research.get("listings_found_approx", 0),
@@ -439,7 +444,7 @@ async def valuate(req: ValuationRequest):
             "body_type": gemini_result.get("body_type", ""),
             "registration_year": gemini_result.get("registration_year", ""),
             "color": rc_data.get("color", ""),
-            "owner_count": rc_data.get("owner_sr", 1),
+            "owner_count": owner_sr,
             "insurance_valid_till": rc_data.get("insurance_validity", ""),
             "financer": rc_data.get("financer", ""),
             "confidence": gemini_result.get("confidence", 0),

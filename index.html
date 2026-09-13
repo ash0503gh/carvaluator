@@ -35,6 +35,15 @@
                 <label class="label" for="km-run">Odometer (km)</label>
                 <input id="km-run" class="text-field" type="number" placeholder="45,000" min="0" max="999999">
 
+                <label class="label" for="owner-count">Ownership (optional)</label>
+                <select id="owner-count" class="text-field" style="cursor:pointer">
+                    <option value="">Auto-detect from RC</option>
+                    <option value="1">1st Owner</option>
+                    <option value="2">2nd Owner</option>
+                    <option value="3">3rd Owner</option>
+                    <option value="4">4th Owner+</option>
+                </select>
+
                 <button id="valuate-btn" class="cta" onclick="submitValuation()">
                     <span class="cta-label">Get Valuation</span>
                     <span class="cta-loading" style="display:none">

@@ -29,6 +29,11 @@ except ImportError:
     print("Error: Missing required packages. Run: pip install requests cryptography")
     sys.exit(1)
 
+try:
+    from curl_cffi import requests as cffi_requests
+except ImportError:
+    cffi_requests = None
+
 
 # =====================================================================
 # 1. DATA MODELS
@@ -171,7 +176,6 @@ def fetch_cars24_details(reg_no: str, timeout: float = 12.0) -> Optional[Dict[st
     """Queries Cars24's valuation supply microservice."""
     url = f"https://vehicle.cars24.team/v1/2025-09/vehicle-number/{reg_no}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "x_basic_a": "Basic YzJiX2Zyb250ZW5kOko1SXRmQTk2bTJfY3lRVk00dEtOSnBYaFJ0c0NtY1h1",
         "referer": "https://www.cars24.com/sell-used-cars/",
         "origin": "https://www.cars24.com",
@@ -179,23 +183,31 @@ def fetch_cars24_details(reg_no: str, timeout: float = 12.0) -> Optional[Dict[st
         "origin_source": "c2b-website",
         "platform": "seller",
         "accept": "application/json, text/plain, */*",
-        "X-Forwarded-For": "103.211.200.1",
-        "X-Real-IP": "103.211.200.1",
-        "CF-Connecting-IP": "103.211.200.1",
     }
+    # 1. Try curl_cffi with Chrome 124 browser impersonation (bypasses Cloudflare bot blocks)
+    if cffi_requests:
+        try:
+            resp = cffi_requests.get(url, headers=headers, impersonate="chrome124", timeout=timeout)
+            print(f"[CARS24 cffi] {reg_no} HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success"):
+                    return data.get("detail", {})
+            else:
+                print(f"[CARS24 cffi] HTTP {resp.status_code}: {resp.text[:150]}")
+        except Exception as e:
+            print(f"[CARS24 cffi] err for {reg_no}: {e}")
+
+    # 2. Fallback to standard requests
     try:
         resp = requests.get(url, headers=headers, timeout=timeout)
-        print(f"[CARS24] {reg_no} HTTP {resp.status_code}")
+        print(f"[CARS24 requests] {reg_no} HTTP {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
             if data.get("success"):
                 return data.get("detail", {})
-            else:
-                print(f"[CARS24] success=false: {data}")
-        else:
-            print(f"[CARS24] HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
-        print(f"[CARS24] Exception for {reg_no}: {type(e).__name__}: {e}")
+        print(f"[CARS24 requests] Exception for {reg_no}: {type(e).__name__}: {e}")
     return None
 
 def fetch_spinny_details(reg_no: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
