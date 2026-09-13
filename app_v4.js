@@ -199,18 +199,15 @@ function render(data) {
             </div>
         </div>`).join("");
 
-    // Cross-check — only shown when divergence > 25%
-    const ccCard = document.getElementById("cross-check-card");
-    if (cc && cc.available && cc.significant_divergence) {
-        ccCard.style.display = "block";
-        document.getElementById("cc-formula-value").textContent = fmt(cc.formula_value_lakh);
-        document.getElementById("cc-formula-detail").textContent = `${cc.depreciation_pct.toFixed(0)}% dep. from ${fmt(cc.ex_showroom_lakh)} when new`;
-        document.getElementById("cc-market-value").textContent = fmt(cc.live_market_median_lakh);
-        const sign = cc.divergence_pct >= 0 ? "+" : "";
-        document.getElementById("cc-intro").textContent =
-            `The standard depreciation formula and live market differ by ${sign}${cc.divergence_pct.toFixed(0)}%. This usually means the car holds value better (or worse) than average — worth double-checking.`;
-    } else {
-        ccCard.style.display = "none";
+    // Depreciation divergence note — only shown when divergence > 25%
+    const ccNote = document.getElementById("cross-check-card");
+    if (ccNote) {
+        if (cc && cc.available && cc.significant_divergence) {
+            ccNote.style.display = "block";
+            ccNote.textContent = "Note: Live market price differs by more than 25% from standard depreciation.";
+        } else {
+            ccNote.style.display = "none";
+        }
     }
 
     // Flags

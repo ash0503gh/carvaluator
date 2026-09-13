@@ -96,23 +96,8 @@
                 <div id="adjustment-grid"></div>
             </div>
 
-            <!-- Cross-check (only shown when divergence > 25%) -->
-            <div class="card card-warn" id="cross-check-card" style="display:none">
-                <h3 class="section-title">Worth a second look</h3>
-                <p class="cc-intro" id="cc-intro"></p>
-                <div class="cc-pair">
-                    <div class="cc-box">
-                        <div class="cc-box-label">Formula estimate</div>
-                        <div class="cc-box-value" id="cc-formula-value">—</div>
-                        <div class="cc-box-note" id="cc-formula-detail">—</div>
-                    </div>
-                    <div class="cc-box">
-                        <div class="cc-box-label">Live market</div>
-                        <div class="cc-box-value" id="cc-market-value">—</div>
-                        <div class="cc-box-note">Current listings</div>
-                    </div>
-                </div>
-            </div>
+            <!-- Depreciation divergence note (only shown when divergence > 25%) -->
+            <p class="cc-simple-note" id="cross-check-card" style="display:none"></p>
 
             <!-- Notices -->
             <div class="card card-alert" id="flags-card" style="display:none">

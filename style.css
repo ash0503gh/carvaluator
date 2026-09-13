@@ -464,30 +464,16 @@ body {
     line-height: 1.6;
 }
 
-/* ─── Cross-check ──────────────────────────────────────────────── */
-.cc-intro {
-    font-size: 0.85rem;
-    color: var(--ink-2);
-    margin-bottom: 14px;
-    line-height: 1.55;
-}
-
-.cc-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.cc-box {
-    text-align: center;
-    padding: 14px 10px;
+/* ─── Cross-check Divergence Note ──────────────────────────────── */
+.cc-simple-note {
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    margin: 14px 4px 0 4px;
+    line-height: 1.5;
+    padding: 8px 12px;
     background: var(--surface-dim);
     border-radius: var(--radius-sm);
 }
-
-.cc-box-label { font-size: 0.72rem; font-weight: 500; color: var(--ink-3); margin-bottom: 6px; }
-.cc-box-value { font-family: var(--mono); font-size: 1.1rem; font-weight: 600; color: var(--ink); }
-.cc-box-note { font-size: 0.68rem; color: var(--ink-4); margin-top: 4px; }
 
 /* ─── Notices ──────────────────────────────────────────────────── */
 .flag-item {
