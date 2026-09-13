@@ -23,6 +23,53 @@ const I = {
     check:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
 };
 
+// ─── Browser Cache (1 hour TTL) ───────────────────────────────────
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function getCacheKey(rc, km, ownerVal) {
+    return `cv_cache_${rc}_${km}_${ownerVal || "auto"}`;
+}
+
+function getCachedValuation(rc, km, ownerVal) {
+    try {
+        const key = getCacheKey(rc, km, ownerVal);
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const entry = JSON.parse(raw);
+        if (entry && entry.timestamp && (Date.now() - entry.timestamp < CACHE_TTL_MS)) {
+            return entry.data;
+        }
+        localStorage.removeItem(key);
+    } catch (e) {}
+    return null;
+}
+
+function setCachedValuation(rc, km, ownerVal, data) {
+    try {
+        const key = getCacheKey(rc, km, ownerVal);
+        localStorage.setItem(key, JSON.stringify({
+            timestamp: Date.now(),
+            data: data
+        }));
+        cleanExpiredCache();
+    } catch (e) {}
+}
+
+function cleanExpiredCache() {
+    try {
+        const now = Date.now();
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith("cv_cache_")) {
+                const entry = JSON.parse(localStorage.getItem(k));
+                if (entry && entry.timestamp && (now - entry.timestamp >= CACHE_TTL_MS)) {
+                    localStorage.removeItem(k);
+                }
+            }
+        }
+    } catch (e) {}
+}
+
 // ─── Submit ────────────────────────────────────────────────────────
 
 async function submitValuation() {
@@ -44,6 +91,16 @@ async function submitValuation() {
     if (!rc) { showErr("Enter a registration number."); rcInput.focus(); return; }
     if (isNaN(km) || km < 0) { showErr("Enter a valid odometer reading."); kmInput.focus(); return; }
 
+    const ownerInput = document.getElementById("owner-count");
+    const ownerVal = ownerInput && ownerInput.value ? parseInt(ownerInput.value, 10) : null;
+
+    // Check browser cache (1-hour TTL)
+    const cached = getCachedValuation(rc, km, ownerVal);
+    if (cached) {
+        render(cached);
+        return;
+    }
+
     btn.disabled = true;
     btnLabel.style.display = "none";
     btnLoad.style.display = "inline-flex";
@@ -55,9 +112,6 @@ async function submitValuation() {
         loadMsg.textContent = STAGES[si];
     }, 2500);
 
-    const ownerInput = document.getElementById("owner-count");
-    const ownerVal = ownerInput && ownerInput.value ? parseInt(ownerInput.value, 10) : null;
-
     try {
         const resp = await fetch("/api/valuate", {
             method: "POST",
@@ -66,6 +120,7 @@ async function submitValuation() {
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || "Something went wrong.");
+        setCachedValuation(rc, km, ownerVal, data);
         render(data);
     } catch (e) {
         showErr(e.message);
