@@ -468,6 +468,6 @@ async def serve_index():
 @app.get("/{filename}")
 async def serve_static(filename: str):
     filepath = os.path.join(BASE_DIR, filename)
-    if os.path.isfile(filepath) and filename in ["style.css", "app_v3.js", "favicon.ico"]:
+    if os.path.isfile(filepath) and filename in ["style.css", "app_v4.js", "favicon.ico"]:
         return FileResponse(filepath)
     raise HTTPException(status_code=404)
