@@ -34,253 +34,71 @@ class ValuationRequest(BaseModel):
     km_run: int
 
 
-# ─── Vehicle Data Extraction (Cars24 + Spinny fallback + CarInfo challans) ────
-# No external paid API needed. Uses Cars24's internal valuation API as primary,
-# Spinny as fallback, and CarInfo SSR + AES decryption for challan data.
-# All three run in parallel via ThreadPoolExecutor for sub-second total latency.
-# Spec: VEHICLE_EXTRACTION_SPEC.md
+# ─── Vehicle Data Extraction ──────────────────────────────────────────
+# Uses vehicle_details.py (Cars24 + Spinny fallback + CarInfo challans).
+# No paid API needed — zero cost per lookup.
 
-import base64
-import hashlib
-from concurrent.futures import ThreadPoolExecutor
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
-
-CHALLAN_PASSPHRASE = "Gx!7m$9zK@qW2vP"
-
-BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
-# Auto-detection tokens for transmission (from spec Section 6)
-AUTO_TOKENS = ("STRONG HYBRID", "E-CVT", "E:HEV", " AT", "AT ", "(AT)", "CVT", "DCT", "DSG", "AMT", "AGS", "TC", "AUTOMATIC")
-
-
-def _evp_bytes_to_key(passphrase: str, salt: bytes, key_len=32, iv_len=16):
-    d = d_i = b""
-    pass_bytes = passphrase.encode("utf-8")
-    while len(d) < (key_len + iv_len):
-        d_i = hashlib.md5(d_i + pass_bytes + salt).digest()
-        d += d_i
-    return d[:key_len], d[key_len:key_len + iv_len]
-
-
-def _decrypt_cryptojs(encrypted_b64: str, passphrase: str) -> str:
-    raw = base64.b64decode(encrypted_b64)
-    if not raw.startswith(b"Salted__"):
-        raise ValueError("Not CryptoJS Salted format")
-    salt = raw[8:16]
-    ciphertext = raw[16:]
-    key, iv = _evp_bytes_to_key(passphrase, salt)
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    padded = decryptor.update(ciphertext) + decryptor.finalize()
-    pad_len = padded[-1]
-    return padded[:-pad_len].decode("utf-8")
-
-
-def _fetch_cars24(reg_no: str):
-    """Primary RC data source — Cars24's internal valuation API."""
-    url = f"https://vehicle.cars24.team/v1/2025-09/vehicle-number/{reg_no}"
-    headers = {
-        "User-Agent": BROWSER_UA,
-        "x_basic_a": "Basic YzJiX2Zyb250ZW5kOko1SXRmQTk2bTJfY3lRVk00dEtOSnBYaFJ0c0NtY1h1",
-        "referer": "https://www.cars24.com/",
-        "device_category": "WebApp",
-        "origin_source": "c2b-website",
-        "platform": "seller",
-        "accept": "application/json",
-    }
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            return r.json().get("detail")
-    except Exception:
-        pass
-    return None
-
-
-def _fetch_spinny(reg_no: str):
-    """Fallback RC data source if Cars24 fails/404s."""
-    url = f"https://api.spinny.com/v3/api/supply/{reg_no}/car-details/"
-    headers = {
-        "User-Agent": BROWSER_UA,
-        "Referer": "https://www.spinny.com/sell-used-car/",
-        "Origin": "https://www.spinny.com",
-        "Accept": "application/json",
-    }
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            return r.json().get("verification_data")
-    except Exception:
-        pass
-    return None
-
-
-def _fetch_challans(reg_no: str):
-    """Fetch challan count + total amount from CarInfo via SSR + AES decryption."""
-    url = f"https://www.carinfo.app/challan-details/{reg_no}"
-    headers = {"User-Agent": BROWSER_UA, "Accept": "text/html"}
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code != 200:
-            return 0, 0.0
-        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
-        if not m:
-            return 0, 0.0
-        nd = json.loads(m.group(1))
-        enc = nd.get("props", {}).get("pageProps", {}).get("xdataprops")
-        if not enc:
-            return 0, 0.0
-        dec_str = _decrypt_cryptojs(enc, CHALLAN_PASSPHRASE)
-        tabs = json.loads(dec_str).get("data", {}).get("tabs", [])
-        count = 0
-        total_amt = 0.0
-        for tab in tabs:
-            for item in tab.get("tabSection", []):
-                count += 1
-                try:
-                    total_amt += float(item.get("amount") or 0)
-                except Exception:
-                    pass
-        return count, round(total_amt, 2)
-    except Exception:
-        return 0, 0.0
-
-
-def _resolve_transmission(rc_model: str, variant: str, ds_details: list) -> str:
-    """Heuristic transmission detection from spec Section 6."""
-    full_text = f"{rc_model} {variant}".upper()
-    if any(tok in full_text for tok in AUTO_TOKENS):
-        return "Automatic"
-    # Check ds_details transmission field as secondary signal
-    if ds_details:
-        ds_trans = (ds_details[0].get("transmission") or "").upper()
-        if ds_trans == "AT":
-            return "Automatic"
-    return "Manual"
-
+from vehicle_details import scrape_vehicle
 
 def decode_rc(rc_number: str) -> dict:
     """
-    Extract vehicle RC data + challan info with zero paid API dependencies.
-    Uses Cars24 (primary) + Spinny (fallback) for RC, CarInfo for challans.
-    All run in parallel for ~250ms total latency.
+    Wrapper around vehicle_details.scrape_vehicle() that maps its
+    LookupResult dataclass into the flat dict the rest of the app expects.
     """
-    clean = re.sub(r"[^A-Z0-9]", "", rc_number.upper())
+    result = scrape_vehicle(rc_number)
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_cars24 = pool.submit(_fetch_cars24, clean)
-        f_spinny = pool.submit(_fetch_spinny, clean)
-        f_challan = pool.submit(_fetch_challans, clean)
+    if not result.success or not result.vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail=result.error_message or f"Could not find vehicle data for {rc_number}.",
+        )
 
-        detail = f_cars24.result()
-        spinny_data = f_spinny.result()
-        ch_count, ch_amt = f_challan.result()
+    v = result.vehicle
 
-    # ── Cars24 path (primary) ──
-    if detail and isinstance(detail, dict):
-        make = (detail.get("brand") or {}).get("make_display", "")
-        model_name = (detail.get("model") or {}).get("model_display", "")
-        rc_model = detail.get("rc_model") or ""
-        ds_details = detail.get("ds_details") or []
+    # Parse owner count safely
+    owner_sr = v.owner_count or 1
+    if isinstance(owner_sr, str) and owner_sr.isdigit():
+        owner_sr = int(owner_sr)
+    elif not isinstance(owner_sr, int):
+        owner_sr = 1
 
-        # Variant resolution per spec: rc_model is authoritative over ds_details guess
-        variant = ""
-        rc_upper = rc_model.upper()
-        if "STRONG HYBRID" in rc_upper:
-            variant = "STRONG HYBRID ALPHA+" if "ALPHA" in rc_upper else "STRONG HYBRID"
-        elif rc_model:
-            # Strip make/model tokens to get just the trim/variant portion
-            variant = rc_model
-            for token in [make, model_name]:
-                if token:
-                    variant = variant.replace(token, "").replace(token.upper(), "")
-            variant = variant.strip(" -/")
-        if not variant and ds_details:
-            variant = ds_details[0].get("variant", "")
+    # RTO code from the dataclass or from the plate itself
+    rto_code = ""
+    if v.rto and v.rto.code:
+        rto_code = v.rto.code.replace("-", "")
+    if not rto_code:
+        rto_code = re.sub(r"[^A-Z0-9]", "", rc_number.upper())[:4]
 
-        transmission = _resolve_transmission(rc_model, variant, ds_details)
-
-        # Year: regn_year → registeredAt → manufacturingMonthYr
-        year = detail.get("regn_year")
-        if not year and detail.get("registeredAt"):
-            try:
-                year = int(detail["registeredAt"][:4])
-            except (ValueError, TypeError):
-                pass
-        if not year and detail.get("manufacturingMonthYr"):
-            try:
-                year = int(detail["manufacturingMonthYr"].split("/")[-1])
-            except (ValueError, TypeError):
-                pass
-
-        insurance_details = detail.get("insurance_details") or {}
-
-        return {
-            "rc_number": clean,
-            "reg_date": detail.get("registeredAt", ""),
-            "owner_name": detail.get("masked_name", ""),
-            "fuel_type": (detail.get("fuel_type") or "Petrol").title(),
-            "vehicle_manufacturer": make,
-            "vehicle_model": f"{model_name} {rc_model}".strip() if rc_model else model_name,
-            "variant": variant or "Base / Standard",
-            "transmission": transmission,
-            "owner_sr": int(detail.get("rc_owner_sr") or detail.get("owner") or 1),
-            "rto_code": (detail.get("rto_code") or clean[:4]).replace("-", ""),
-            "vehicle_class": detail.get("rc_vh_class") or "LMV",
-            "insurance_validity": insurance_details.get("expiry_date", ""),
-            "fitness_upto": "",
-            "financer": "",
-            "color": "",
-            "rc_status": "Active",
-            "body_type": "",
-            "is_commercial": False,
-            "blacklist_status": "Not Blacklisted",
-            "blacklist_reason": "",
-            "pending_challan": ch_count > 0,
-            "challan_amount": str(ch_amt) if ch_amt > 0 else "",
-            "total_challans": ch_count,
-            "total_challan_amount": ch_amt,
-            "manufacture_year": year,
-        }
-
-    # ── Spinny path (fallback) ──
-    if spinny_data and isinstance(spinny_data, dict):
-        transmission = (spinny_data.get("transmission") or "Manual").title()
-        year = spinny_data.get("yearOfManufacture")
-
-        return {
-            "rc_number": clean,
-            "reg_date": "",
-            "owner_name": "",
-            "fuel_type": (spinny_data.get("fuel_type") or "Petrol").title(),
-            "vehicle_manufacturer": spinny_data.get("make", ""),
-            "vehicle_model": f"{spinny_data.get('make', '')} {spinny_data.get('model', '')}".strip(),
-            "variant": spinny_data.get("variant", ""),
-            "transmission": transmission,
-            "owner_sr": int(spinny_data.get("owner") or 1),
-            "rto_code": clean[:4],
-            "vehicle_class": "LMV",
-            "insurance_validity": "",
-            "fitness_upto": "",
-            "financer": "",
-            "color": "",
-            "rc_status": "Active",
-            "body_type": "",
-            "is_commercial": False,
-            "blacklist_status": "Not Blacklisted",
-            "blacklist_reason": "",
-            "pending_challan": ch_count > 0,
-            "challan_amount": str(ch_amt) if ch_amt > 0 else "",
-            "total_challans": ch_count,
-            "total_challan_amount": ch_amt,
-            "manufacture_year": year,
-        }
-
-    raise HTTPException(
-        status_code=404,
-        detail=f"Could not find vehicle data for {rc_number}. Both Cars24 and Spinny returned no results.",
-    )
+    return {
+        "rc_number": v.registration_number,
+        "reg_date": "",  # Cars24 returns registeredAt but scraper doesn't expose raw date
+        "owner_name": v.owner_name_masked or "",
+        "fuel_type": (v.fuel_type or "Petrol").title(),
+        "vehicle_manufacturer": v.make_and_model.split()[0] if v.make_and_model else "",
+        "vehicle_model": v.make_and_model or "",
+        "variant": v.variant or "",
+        "transmission": v.transmission or "Manual",
+        "owner_sr": owner_sr,
+        "rto_code": rto_code,
+        "vehicle_class": v.vehicle_category or "LMV",
+        "insurance_validity": (v.insurance.expiry_date if v.insurance else "") or "",
+        "fitness_upto": "",
+        "financer": "",
+        "color": v.color or "",
+        "rc_status": "Active",
+        "body_type": v.body_type or "",
+        "is_commercial": False,
+        "blacklist_status": "Not Blacklisted",
+        "blacklist_reason": "",
+        "pending_challan": bool(v.total_challans and v.total_challans > 0),
+        "challan_amount": str(v.total_challan_amount) if v.total_challan_amount else "",
+        "total_challans": v.total_challans or 0,
+        "total_challan_amount": v.total_challan_amount or 0.0,
+        "manufacture_year": v.manufacture_year,
+        "city": v.city or "",
+        "provider": result.provider or "",
+        "lookup_time_ms": result.lookup_time_ms,
+    }
 
 
 # ─── Gemini AI (Normalize + Price Research) ─────────────────────────
