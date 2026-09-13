@@ -261,6 +261,18 @@ function shareSummary() {
     else copySummary();
 }
 
+function goBack() {
+    const results = document.getElementById("results");
+    if (results) results.style.display = "none";
+    const errBox = document.getElementById("error-box");
+    if (errBox) errBox.style.display = "none";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const rcInput = document.getElementById("rc-number");
+    if (rcInput) {
+        setTimeout(() => rcInput.focus(), 250);
+    }
+}
+
 // ─── Input behavior ────────────────────────────────────────────────
 
 document.addEventListener("keydown", e => {
