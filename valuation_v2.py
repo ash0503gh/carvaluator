@@ -272,12 +272,12 @@ def get_ex_showroom_price(catalog: dict, model: str, generation: str) -> float:
     return 0
 
 
-def calc_cross_check(catalog: dict, model: str, generation: str, age_years: float, live_median_lakh: float) -> dict:
+def calc_cross_check(catalog: dict, model: str, generation: str, age_years: float, live_median_lakh: float, ex_showroom_override: float = 0.0) -> dict:
     """
     Compare the depreciation-formula estimate against the live-listing median.
     Always returned (per product decision) — not just when they diverge.
     """
-    ex_showroom = get_ex_showroom_price(catalog, model, generation)
+    ex_showroom = ex_showroom_override or get_ex_showroom_price(catalog, model, generation)
     if not ex_showroom:
         return {"available": False}
 
@@ -316,6 +316,7 @@ def compute_valuation(
     model: str = "",
     generation: str = "",
     transmission_type: str = "",
+    ex_showroom_override: float = 0.0,
 ) -> dict:
     """
     Apply all deterministic adjustments on top of AI-researched market prices.
@@ -361,7 +362,7 @@ def compute_valuation(
 
     # Depreciation-formula cross-check — independent, always computed, never
     # feeds back into the number above
-    cross_check = calc_cross_check(CATALOG, model, generation, age_years, market_median)
+    cross_check = calc_cross_check(CATALOG, model, generation, age_years, market_median, ex_showroom_override=ex_showroom_override)
 
     return {
         "final_range": {

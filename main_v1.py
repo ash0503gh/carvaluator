@@ -129,12 +129,14 @@ def call_gemini(rc_data: dict, km_run: int) -> dict:
 
     age_years = calc_age_years(rc_data["reg_date"]) if rc_data["reg_date"] else 0
 
-    prompt = f"""You are a used car valuation expert for the Indian market, specifically Maruti Suzuki vehicles.
+    prompt = f"""You are an expert used car valuation specialist and market researcher for ALL passenger vehicles in the Indian automotive market (including Maruti Suzuki, Hyundai, Tata, Mahindra, Honda, Toyota, Kia, Volkswagen, Skoda, MG, Renault, Nissan, etc.).
 
-VEHICLE DATA FROM GOVERNMENT RC DATABASE:
+VEHICLE DATA FROM GOVERNMENT RC / RTO DATABASE:
 - Registration Number: {rc_data['rc_number']}
 - Raw Manufacturer: {rc_data['vehicle_manufacturer']}
 - Raw Model String: {rc_data['vehicle_model']}
+- Variant (from RC): {rc_data.get('variant', '')}
+- Transmission (from RC): {rc_data.get('transmission', '')}
 - Registration Date: {rc_data['reg_date']}
 - Fuel Type (from RC): {rc_data['fuel_type']}
 - Owner Serial Number: {rc_data['owner_sr']}
@@ -144,48 +146,54 @@ VEHICLE DATA FROM GOVERNMENT RC DATABASE:
 - KM Run (user input): {km_run}
 - Approximate Age: {age_years:.1f} years
 
-MARUTI SUZUKI MODEL CATALOG:
+REFERENCE MARUTI CATALOG (use if the vehicle is Maruti Suzuki; for other brands use your general Indian automotive knowledge):
 {chr(10).join(catalog_summary)}
 
 YOUR TASKS:
 
-1. NORMALIZE: Match the raw RC manufacturer/model string to the correct Maruti model, generation, and variant from the catalog above. Use registration year + fuel type to determine the correct generation. The raw model string sometimes includes the variant/trim directly (e.g. "GRAND VITARA STRONG HYBRID ALPHA+") — extract it if present. If variant genuinely cannot be determined, set it to "Unknown".
+1. NORMALIZE: Identify the exact vehicle brand, model name, generation, variant/trim, and fuel type.
+   - If Maruti Suzuki, match against the catalog above.
+   - If any other brand (e.g. Honda City, Mahindra Thar, Hyundai Creta, Tata Nexon, Toyota Fortuner, etc.), use the manufacturer and raw model string to identify the exact market trim (e.g. "ZX MT", "LX AT", "SX(O)", "Creative Plus", etc.).
+   - If variant is not explicitly clear, provide the most plausible trim or "Standard / Base".
 
-2. PRICE RESEARCH: Search for the current used car market price for this specific Maruti model in India. IMPORTANT: if you identified a specific variant/trim in step 1 (not "Unknown"), search for listings of THAT SPECIFIC VARIANT (e.g. "Swift VXI 2019", not just "Swift 2019") — different trims of the same model can differ by ₹0.5-1.5 lakh, so variant-specific search materially improves accuracy. Only fall back to model-only search (ignoring variant) if variant is "Unknown" or if variant-specific search returns too few results. Look at CarDekho, Cars24, OLX, Spinny, and Orange Book Value listings. Find what similar cars (same model, same variant if known, similar year, similar km range) are currently listed at.
+2. PRICE RESEARCH: Search for the current used car market price for this specific vehicle in India.
+   - Search across top Indian used car platforms: CarDekho, Cars24, Spinny, OLX, CarWale, and Orange Book Value.
+   - Search for the specific model + variant + registration year + fuel type (e.g. "Honda City ZX 2017 price used", "Mahindra Thar LX AT 2021 used price").
+   - Report realistic asking prices in Lakhs (₹).
 
-3. SEGMENT BY SELLER TYPE: Among the listings you found, note whether prices differ between private-party sellers (OLX, individual CarDekho/Cars24 listings) versus dealer-certified listings (Cars24 Assured, Spinny Assured, Maruti True Value) — certified listings typically run 5-10% higher. Report this as a brief note, not a separate numeric range.
+3. SEGMENT BY SELLER TYPE: Note whether prices differ between private-party sellers vs dealer-certified listings (e.g., Spinny Assured, Cars24 Assured, Toyota U-Trust, Maruti True Value). Report this as a brief note.
 
-4. Return your response as ONLY a valid JSON object (no markdown formatting, no backticks, no explanation outside JSON):
+4. Return your response as ONLY a valid JSON object (no markdown formatting, no backticks, no conversational text outside JSON):
 
 {{
-  "model": "Swift",
-  "generation": "4th Gen",
-  "variant": "VXI",
-  "fuel_type": "Petrol",
-  "body_type": "Hatchback",
+  "model": "Model Name (e.g. City / Thar / Creta / Swift / Fortuner)",
+  "generation": "Generation / Year span (e.g. 5th Gen / 2nd Gen / 2017-2020)",
+  "variant": "Trim / Variant (e.g. ZX MT / LX AT / VXI / ALPHA+)",
+  "fuel_type": "Petrol / Diesel / CNG / Electric / Hybrid",
+  "body_type": "Sedan / SUV / Hatchback / MUV",
   "confidence": 0.95,
-  "registration_year": 2018,
-  "ex_showroom_price_when_new_lakh": 7.5,
+  "registration_year": 2020,
+  "ex_showroom_price_when_new_lakh": 12.5,
   "market_price_research": {{
-    "low_lakh": 4.2,
-    "high_lakh": 5.8,
-    "median_lakh": 5.0,
-    "sources_checked": ["CarDekho", "Cars24", "OLX"],
+    "low_lakh": 7.5,
+    "high_lakh": 9.2,
+    "median_lakh": 8.3,
+    "sources_checked": ["CarDekho", "Cars24", "OLX", "Spinny"],
     "listings_found_approx": 15,
     "searched_variant_specifically": true,
-    "price_basis": "Brief explanation of how you arrived at this range",
-    "seller_type_note": "Brief note on private-party vs dealer-certified price difference, if observed"
+    "price_basis": "Brief explanation of how you arrived at this range based on current listings",
+    "seller_type_note": "Brief note on private-party vs dealer-certified pricing"
   }},
-  "flags": ["any warnings or observations"],
-  "match_notes": "explanation of how you matched the model"
+  "flags": ["any observations or warnings"],
+  "match_notes": "Brief explanation of how the vehicle was identified"
 }}
 
-IMPORTANT:
-- The market prices must reflect CURRENT used car asking prices in India for this specific model+year+fuel combination
-- If you find very few or no comparable listings, widen the year range by ±1 year and note this
-- All prices in lakhs (₹)
-- Do NOT include condition-based adjustments — the backend handles those separately
-- Be conservative with the range — better to be slightly wide than confidently wrong"""
+CRITICAL INSTRUCTIONS:
+- You MUST evaluate ANY passenger car brand sold in India. NEVER refuse a request because it is not Maruti.
+- Always output strict JSON matching the schema above.
+- All prices in Lakhs (₹).
+- Do NOT include condition-based adjustments — the backend handles those separately.
+- Be conservative with the range — better to be slightly wide than confidently wrong."""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
@@ -274,9 +282,16 @@ def generate_explanation(rc_data: dict, gemini_result: dict, valuation: dict, pr
 
     seller_note = price_research.get("seller_type_note", "")
 
+    make_str = (rc_data.get('vehicle_manufacturer') or "").strip()
+    model_name = gemini_result.get('model', '').strip()
+    if make_str and make_str.lower() not in model_name.lower():
+        full_vehicle_name = f"{make_str} {model_name}"
+    else:
+        full_vehicle_name = model_name
+
     prompt = f"""Write a concise, professional 4-5 sentence valuation summary for a used car buyer/seller in India.
 
-VEHICLE: {gemini_result.get('registration_year', '')} Maruti Suzuki {gemini_result.get('model', '')} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})
+VEHICLE: {gemini_result.get('registration_year', '')} {full_vehicle_name} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})
 REGISTRATION: {rc_data['rc_number']} | {rc_data['owner_sr']} owner(s)
 KM RUN: {valuation['meta']['km_run']:,} km | Age: {valuation['meta']['age_years']:.1f} years
 
@@ -295,7 +310,7 @@ FINAL ESTIMATED RANGE: ₹{valuation['final_range']['low_lakh']:.2f}L – ₹{va
 
 {cross_check_line}
 
-Write naturally, in flowing prose (not bullet points). Refer to the car only by its model and variant (e.g. "your Swift VXI") — do NOT say "Maruti Suzuki", "Maruti", or mention that this analysis involves AI. Mention the haircut, ownership, and transmission factors briefly. If a seller type note is given above, weave in a brief mention that private-party sales and dealer-certified sales may differ in price. End with a note that condition-based deductions are not included and should be assessed separately. Do NOT use markdown formatting. Keep it under 130 words."""
+Write naturally, in flowing prose (not bullet points). Refer to the car only by its model and variant (e.g. "your City ZX" or "your Swift VXI") — do NOT mention that this analysis involves AI. Mention the haircut, ownership, and transmission factors briefly. If a seller type note is given above, weave in a brief mention that private-party sales and dealer-certified sales may differ in price. End with a note that condition-based deductions are not included and should be assessed separately. Do NOT use markdown formatting. Keep it under 130 words."""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
@@ -316,9 +331,15 @@ Write naturally, in flowing prose (not bullet points). Refer to the car only by 
 def _fallback_explanation(rc_data, gemini_result, valuation):
     """Plain text fallback if Gemini explanation call fails."""
     v = valuation
-    model_name = f"{gemini_result.get('registration_year', '')} {gemini_result.get('model', '')} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})"
+    make_str = (rc_data.get('vehicle_manufacturer') or "").strip()
+    model_name = gemini_result.get('model', '').strip()
+    if make_str and make_str.lower() not in model_name.lower():
+        full_vehicle_name = f"{make_str} {model_name}"
+    else:
+        full_vehicle_name = model_name
+    display_name = f"{gemini_result.get('registration_year', '')} {full_vehicle_name} {gemini_result.get('variant', '')} ({gemini_result.get('fuel_type', '')})".strip()
     return (
-        f"Your {model_name} with {v['meta']['km_run']:,} km is estimated at "
+        f"Based on current market listings, your {display_name} has an estimated market value of "
         f"₹{v['final_range']['low_lakh']:.2f}L – ₹{v['final_range']['high_lakh']:.2f}L, after a "
         f"{v['adjustments']['haircut']['haircut_pct']:.0f}% haircut on listing prices (asking price vs sale price). "
         f"Usage is {v['adjustments']['usage']['label'].lower()}, ownership is "
@@ -342,16 +363,6 @@ async def valuate(req: ValuationRequest):
 
     # Step 1: Decode RC via scraper
     rc_data = decode_rc(rc_number)
-
-    # Check manufacturer
-    make = (rc_data.get("vehicle_manufacturer") or "").strip().lower()
-    model_str = (rc_data.get("vehicle_model") or "").strip().lower()
-    is_maruti = any(k in make or k in model_str for k in ["maruti", "suzuki"])
-    if not is_maruti:
-        raise HTTPException(
-            status_code=400,
-            detail=f"CarValuator currently supports Maruti Suzuki vehicles only. Detected vehicle: {rc_data.get('vehicle_model') or make.title()}."
-        )
 
     # Step 2: Gemini AI — normalize model + research market prices
     gemini_result = call_gemini(rc_data, req.km_run)
@@ -382,6 +393,12 @@ async def valuate(req: ValuationRequest):
     fuel_type = gemini_result.get("fuel_type", rc_data.get("fuel_type", "Petrol"))
 
     # Step 5: Deterministic valuation adjustments
+    ex_showroom = 0.0
+    try:
+        ex_showroom = float(gemini_result.get("ex_showroom_price_when_new_lakh") or price_research.get("ex_showroom_price_when_new_lakh") or 0.0)
+    except (ValueError, TypeError):
+        ex_showroom = 0.0
+
     valuation = compute_valuation(
         market_low=market_low,
         market_high=market_high,
@@ -396,6 +413,7 @@ async def valuate(req: ValuationRequest):
         model=gemini_result.get("model", ""),
         generation=gemini_result.get("generation", ""),
         transmission_type=rc_data.get("transmission", ""),
+        ex_showroom_override=ex_showroom,
     )
 
     # Step 6: AI-generated explanation

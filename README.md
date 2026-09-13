@@ -1,6 +1,6 @@
 # CarValuator
 
-AI-powered Maruti Suzuki used car valuation tool. Enter a registration number and odometer reading to get an estimated market value range.
+AI-powered Indian used car valuation tool. Enter any Indian registration number and odometer reading to get an estimated market value range across all major brands.
 
 ## How It Works
 

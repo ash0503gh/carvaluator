@@ -475,19 +475,27 @@ def scrape_vehicle(registration_number: str, timeout: float = 10.0) -> LookupRes
         make = ""
         model = rc_model
         rc_up = rc_model.upper()
-        if "VITARA" in rc_up or "MARUTI" in rc_up:
-            make = "Maruti Suzuki"
-            model = "Grand Vitara" if "VITARA" in rc_up else rc_model
-        elif "HONDA" in rc_up or "CITY" in rc_up or "BRIO" in rc_up:
-            make = "Honda"
-            model = "City" if "CITY" in rc_up else ("Brio" if "BRIO" in rc_up else rc_model)
-        elif "HYUNDAI" in rc_up or "VERNA" in rc_up or "CRETA" in rc_up:
-            make = "Hyundai"
-            model = "Creta" if "CRETA" in rc_up else ("Verna" if "VERNA" in rc_up else rc_model)
-        elif "TOYOTA" in rc_up or "FORTUNER" in rc_up or "INNOVA" in rc_up:
-            make = "Toyota"
-            model = "Fortuner" if "FORTUNER" in rc_up else ("Innova" if "INNOVA" in rc_up else rc_model)
-        elif " " in rc_model:
+        
+        COMMON_MAKES = [
+            ("Maruti Suzuki", ["MARUTI", "SUZUKI", "VITARA", "SWIFT", "BALENO", "DZIRE", "WAGON", "ALTO", "CELERIO", "ERTIGA", "BREZZA", "FRONX", "JIMNY", "IGNIS", "CIAZ", "S-CROSS", "XL6"]),
+            ("Hyundai", ["HYUNDAI", "CRETA", "VERNA", "I20", "I10", "VENUE", "TUCSON", "AURA", "ALCAZAR", "SANTRO"]),
+            ("Tata", ["TATA", "NEXON", "PUNCH", "HARRIER", "SAFARI", "TIAGO", "TIGOR", "ALTROZ", "INDICA"]),
+            ("Mahindra", ["MAHINDRA", "THAR", "SCORPIO", "XUV700", "XUV300", "XUV 3XO", "BOLERO", "XYLO", "MARAZZO"]),
+            ("Honda", ["HONDA", "CITY", "AMAZE", "CIVIC", "BRIO", "JAZZ", "WR-V", "ELEVATE", "CR-V"]),
+            ("Toyota", ["TOYOTA", "FORTUNER", "INNOVA", "CRYSTA", "HYCROSS", "GLANZA", "URBAN CRUISER", "HYRYDER", "COROLLA", "CAMRY", "YARIS"]),
+            ("Kia", ["KIA", "SELTOS", "SONET", "CARENS", "CARNIVAL", "EV6"]),
+            ("Volkswagen", ["VOLKSWAGEN", "VW", "POLO", "VENTO", "TAIGUN", "VIRTUS", "TIGUAN", "JETTA", "PASSAT"]),
+            ("Skoda", ["SKODA", "RAPID", "SLAVIA", "KUSHAQ", "OCTAVIA", "SUPERB", "KODIAQ"]),
+            ("MG", ["MG", "HECTOR", "ASTOR", "ZS", "GLOSTER", "COMET"]),
+            ("Renault", ["RENAULT", "KWID", "TRIBER", "KIGER", "DUSTER"]),
+            ("Nissan", ["NISSAN", "MAGNITE", "KICKS", "MICRA", "SUNNY", "TERRANO"]),
+        ]
+        for brand, keywords in COMMON_MAKES:
+            if any(k in rc_up for k in keywords):
+                make = brand
+                break
+
+        if not make and " " in rc_model:
             make = rc_model.split()[0]
             model = " ".join(rc_model.split()[1:])
 
